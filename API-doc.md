@@ -76,6 +76,16 @@ continue to use the natural age group.
 - `GET /api/tournaments/{tournamentId}/categories/{categoryId}/rankings`
 - `GET /api/tournaments/{tournamentId}/categories/{categoryId}/standings`
 
+The draw format `BestOfThree` is accepted only for exactly two athletes in the individual competition
+mode; otherwise the draw returns a validation problem with `messageKey`
+`errors.draw.bestOfThreeRequiresTwoAthletes` or `errors.draw.bestOfThreeRequiresIndividualMode`. It creates
+bouts 1 and 2 (rounds 1 and 2); confirming bout 2 at a 1:1 series score creates the deciding bout
+(round 3) on the same tatami, and a result correction adds or removes it (removing a started deciding
+bout requires confirmation and writes a `DecidingFightRemoved` audit entry). An unlocked Best-of-Three
+category whose athlete count changes away from two loses its draw. Fights of a series carry
+`series` (`boutNumber`, `isDecidingFight`, `whiteWins`, `blueWins`); ranking entries carry
+`seriesWins`/`seriesLosses`.
+
 - `GET/PUT /api/tournaments/{tournamentId}/category-presets`
 - `GET /api/tournaments/{tournamentId}/category-presets/warnings` (Admin/Operator; registrations without age group, presets that can never be a natural age group, categories whose age group has no preset)
 - `POST /api/tournaments/{tournamentId}/category-presets/reset-defaults`

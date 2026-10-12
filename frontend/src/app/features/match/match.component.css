@@ -243,6 +243,12 @@
   align-items: center;
 }
 
+.fight-card__clock {
+  display: flex;
+  align-items: start;
+  gap: 1.25rem;
+}
+
 .fight-card__timer {
   display: flex;
   flex-direction: column;

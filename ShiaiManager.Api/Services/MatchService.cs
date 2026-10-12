@@ -575,10 +575,11 @@ public sealed class MatchService : IMatchService
         fight.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         int resetCount = 0;
+        FightRecord? removedDecidingFight = null;
         if (winnerChanges)
         {
             resetCount = await ResetAffectedStartedFightsAsync(fight, cancellationToken);
-            await RecalculateProgressionAsync(fight.CategoryId, cancellationToken);
+            removedDecidingFight = await RecalculateProgressionAsync(fight.CategoryId, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -591,6 +592,13 @@ public sealed class MatchService : IMatchService
         await _auditLog.LogAsync(
             fight.TournamentId, user, "ResultEdited", "Fight", fight.Id,
             $"Previous=[{prev}] New=[{next}]", cancellationToken);
+
+        if (removedDecidingFight is not null)
+        {
+            await _auditLog.LogAsync(
+                fight.TournamentId, user, "DecidingFightRemoved", "Fight", removedDecidingFight.Id,
+                $"Status={removedDecidingFight.Status}; CorrectedFightId={fight.Id}", cancellationToken);
+        }
 
         _ = _hub.Clients.Group(fight.TournamentId.ToString())
             .SendAsync("CategoryFightsUpdated",
@@ -650,6 +658,20 @@ public sealed class MatchService : IMatchService
         SimulateProgression(cloned, drawFormat ?? string.Empty);
 
         var affected = new List<AffectedFightSummary>();
+
+        // A Kampfserie has no participant progression; a correction can only make the Entscheidungskampf obsolete.
+        if (BestOfThreeSeries.IsSeries(drawFormat))
+        {
+            var decider = fights.FirstOrDefault(f => f.Round == BestOfThreeSeries.DecidingRound);
+            if (decider?.StartedAtUtc is not null && !BestOfThreeSeries.NeedsDecidingFight(cloned))
+            {
+                affected.Add(new AffectedFightSummary(
+                    decider.Id, categoryName, decider.Round, decider.FightNumber, decider.Status));
+            }
+
+            return affected;
+        }
+
         foreach (var clone in cloned)
         {
             if (clone.Id == editedFight.Id) continue;
@@ -728,7 +750,7 @@ public sealed class MatchService : IMatchService
     /// </summary>
     private static void SimulateProgression(List<FightRecord> fights, string drawFormat)
     {
-        if (drawFormat == BracketFormat.RoundRobin.ToString()) return;
+        if (drawFormat == BracketFormat.RoundRobin.ToString() || BestOfThreeSeries.IsSeries(drawFormat)) return;
 
         if (drawFormat == BracketFormat.DoubleElimination.ToString())
         {
@@ -807,8 +829,10 @@ public sealed class MatchService : IMatchService
     /// purely from the winners and losers of their source fights. Round-1 athlete assignments are never touched.
     /// Group-stage fights are skipped — they have no bracket progression.
     /// This keeps the bracket consistent after both confirmation and correction.
+    /// For a Kampfserie it creates or removes the Entscheidungskampf instead.
     /// </summary>
-    private async Task RecalculateProgressionAsync(Guid categoryId, CancellationToken cancellationToken)
+    /// <returns>The Entscheidungskampf removed from a Kampfserie, or null.</returns>
+    private async Task<FightRecord?> RecalculateProgressionAsync(Guid categoryId, CancellationToken cancellationToken)
     {
         var fights = await _dbContext.Fights
             .Where(f => f.CategoryId == categoryId)
@@ -824,17 +848,22 @@ public sealed class MatchService : IMatchService
         // winner-progression brackets.
         if (drawFormat == BracketFormat.RoundRobin.ToString())
         {
-            return;
+            return null;
+        }
+
+        if (BestOfThreeSeries.IsSeries(drawFormat))
+        {
+            return SyncDecidingFight(fights);
         }
 
         if (drawFormat == BracketFormat.DoubleElimination.ToString())
         {
             RecalculateDoubleEliminationProgression(fights);
-            return;
+            return null;
         }
 
         var main = fights.Where(f => f.BracketType == MainType).ToList();
-        if (main.Count == 0) return;
+        if (main.Count == 0) return null;
 
         var maxRound = main.Max(f => f.Round);
 
@@ -864,6 +893,48 @@ public sealed class MatchService : IMatchService
             repechage.BlueAthleteId = LoserOf(FindMain(semifinalRound, 2));
             repechage.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates the Entscheidungskampf at Serienstand 1:1 (same athletes, same tatami as bout 2) and removes it
+    /// when a correction made it obsolete. Returns the removed fight, if any.
+    /// </summary>
+    private FightRecord? SyncDecidingFight(List<FightRecord> bouts)
+    {
+        var decider = bouts.FirstOrDefault(f => f.Round == BestOfThreeSeries.DecidingRound);
+        var needed = BestOfThreeSeries.NeedsDecidingFight(bouts);
+
+        if (needed && decider is null)
+        {
+            var second = bouts.Single(f => f.Round == 2);
+            var now = DateTimeOffset.UtcNow;
+            _dbContext.Fights.Add(new FightRecord
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = second.TournamentId,
+                CategoryId = second.CategoryId,
+                BracketType = MainType,
+                Round = BestOfThreeSeries.DecidingRound,
+                FightNumber = 1,
+                WhiteAthleteId = second.WhiteAthleteId,
+                BlueAthleteId = second.BlueAthleteId,
+                TatamiId = second.TatamiId,
+                Status = Pending,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+            return null;
+        }
+
+        if (!needed && decider is not null)
+        {
+            _dbContext.Fights.Remove(decider);
+            return decider;
+        }
+
+        return null;
     }
 
     private static void RecalculateDoubleEliminationProgression(List<FightRecord> fights)
@@ -996,11 +1067,29 @@ public sealed class MatchService : IMatchService
         return source.WinnerId == source.WhiteAthleteId ? source.BlueAthleteId : source.WhiteAthleteId;
     }
 
-    private Task BroadcastFightUpdatedAsync(FightRecord fight) =>
-        _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
+    private async Task BroadcastFightUpdatedAsync(FightRecord fight)
+    {
+        var drawFormat = await _dbContext.Categories
+            .AsNoTracking()
+            .Where(c => c.Id == fight.CategoryId)
+            .Select(c => c.DrawFormat)
+            .FirstOrDefaultAsync();
+
+        FightSeries? series = null;
+        if (BestOfThreeSeries.IsSeries(drawFormat))
+        {
+            var bouts = await _dbContext.Fights
+                .AsNoTracking()
+                .Where(f => f.CategoryId == fight.CategoryId)
+                .ToListAsync();
+            series = BestOfThreeSeries.Describe(fight, bouts);
+        }
+
+        await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
             "FightUpdated",
-            new FightUpdatedMessage(MapToFight(fight), DateTimeOffset.UtcNow),
+            new FightUpdatedMessage(MapToFight(fight) with { Series = series }, DateTimeOffset.UtcNow),
             CancellationToken.None);
+    }
 
     /// <summary>Describes the audit entry a fight operation should record after it succeeds.</summary>
     private readonly record struct FightAudit(string Action, string? Details);

@@ -7,6 +7,7 @@ import { extractApiError } from '../../core/http-error';
 import { I18nService } from '../../core/i18n.service';
 import { AffectedFightSummary, CompletedFightSummary, EditFightResultRequest } from '../../core/models';
 import { SideThemeService } from '../../core/side-theme.service';
+import { seriesPositionText } from '../../core/fight-series';
 import { TournamentContextService } from '../../core/tournament-context.service';
 import { TranslatePipe } from '../../core/translate.pipe';
 
@@ -228,6 +229,16 @@ export class CombatOverviewComponent implements OnInit {
       default:
         return 'combatOverview.bracket.main';
     }
+  }
+
+  /** Fight column text: "Kampf n der Serie" / "Entscheidungskampf" for a Kampfserie, else bracket · round · #n. */
+  protected fightLabel(fight: CompletedFightSummary): string {
+    if (fight.series) {
+      const text = seriesPositionText(fight.series, 'inSeries');
+      return this.i18n.translate(text.key, text.params);
+    }
+
+    return `${this.i18n.translate(this.bracketTypeKey(fight))} · ${this.i18n.translate('draw.round', { n: fight.round })} · #${fight.fightNumber}`;
   }
 
   protected formatDuration(seconds: number | null): string {

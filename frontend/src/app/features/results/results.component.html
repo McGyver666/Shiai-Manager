@@ -53,6 +53,11 @@
           <section class="category-block card card--table">
             <div class="card-pad">
               <h2 class="category-title">{{ r.category.name }}</h2>
+              @if (r.entries[0]; as winner) {
+                @if (winner.seriesWins != null && winner.seriesLosses != null) {
+                  <p class="series-note">{{ 'series.rankingNote' | t: { wins: winner.seriesWins, losses: winner.seriesLosses } }}</p>
+                }
+              }
             </div>
             @if (r.loading) {
               <div class="card-pad"><p class="loading-hint">{{ 'common.loading' | t }}</p></div>

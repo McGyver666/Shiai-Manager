@@ -15,7 +15,8 @@ export type BracketFormat =
   | 'DoubleElimination'
   | 'SingleEliminationWithRepechage'
   | 'RoundRobin'
-  | 'RoundRobinWithKnockout';
+  | 'RoundRobinWithKnockout'
+  | 'BestOfThree';
 
 /** Lifecycle state of a fight. */
 export type FightStatus = 'Pending' | 'InProgress' | 'Paused' | 'Completed';
@@ -444,6 +445,14 @@ export interface AutoAssignResult {
   unassigned: UnassignedAthlete[];
 }
 
+/** Position of a fight in a Kampfserie and the current Serienstand (won bouts per side). */
+export interface FightSeries {
+  boutNumber: number;
+  isDecidingFight: boolean;
+  whiteWins: number;
+  blueWins: number;
+}
+
 export interface Fight {
   id: string;
   tournamentId: string;
@@ -481,6 +490,8 @@ export interface Fight {
   startedAtUtc: string | null;
   completedAtUtc: string | null;
   isGoldenScore: boolean;
+  /** Set only for fights of a Kampfserie (Best of Three). */
+  series?: FightSeries | null;
   createdAtUtc: string;
   updatedAtUtc: string;
 }
@@ -522,6 +533,7 @@ export interface CompletedFightSummary {
   startedAtUtc: string | null;
   completedAtUtc: string;
   durationSeconds: number | null;
+  series?: FightSeries | null;
 }
 
 export interface EditFightResultRequest {
@@ -638,6 +650,9 @@ export interface RankingEntry {
   athleteId: string;
   athleteName: string;
   clubName: string;
+  /** Won/lost bouts in a Best-of-Three Kampfserie; null for other formats. */
+  seriesWins?: number | null;
+  seriesLosses?: number | null;
 }
 
 /** Club-level medal counts for the medal table. */

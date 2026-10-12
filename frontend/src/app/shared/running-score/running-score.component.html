@@ -1,0 +1,18 @@
+<div
+  class="running-score"
+  [class.running-score--compact]="size() === 'compact'"
+  role="group"
+  [attr.aria-label]="ariaLabel()">
+  <span class="running-score__heading">{{ heading() }}</span>
+  <span class="running-score__values" aria-hidden="true">
+    @for (side of sides(); track $index) {
+      @if (!$first) {
+        <span class="running-score__separator">:</span>
+      }
+      <span class="running-score__value" [class]="'running-score__value--' + side.tone">{{ side.value }}</span>
+    }
+  </span>
+  @if (note()) {
+    <span class="running-score__note">{{ note() }}</span>
+  }
+</div>

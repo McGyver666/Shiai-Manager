@@ -67,11 +67,18 @@ public sealed class CompletedFightsService : ICompletedFightsService
             .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
 
         var categoryIds = fights.Select(f => f.CategoryId).Distinct().ToHashSet();
-        var categoryNames = await _dbContext.Categories
+        var categories = await _dbContext.Categories
             .AsNoTracking()
             .Where(c => categoryIds.Contains(c.Id))
-            .Select(c => new { c.Id, c.Name })
-            .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
+            .Select(c => new { c.Id, c.Name, c.DrawFormat })
+            .ToListAsync(cancellationToken);
+        var categoryNames = categories.ToDictionary(c => c.Id, c => c.Name);
+
+        // Completed bouts are all a Serienstand counts, so the loaded fights suffice.
+        var seriesBouts = fights
+            .Where(f => categories.Any(c => c.Id == f.CategoryId && BestOfThreeSeries.IsSeries(c.DrawFormat)))
+            .GroupBy(f => f.CategoryId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var tatamiIds = fights
             .Where(f => f.TatamiId.HasValue)
@@ -163,7 +170,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
                 f.BlueAthleteId,
                 f.StartedAtUtc,
                 f.CompletedAtUtc!.Value,
-                DurationSeconds(f)))
+                DurationSeconds(f),
+                seriesBouts.TryGetValue(f.CategoryId, out var bouts) ? BestOfThreeSeries.Describe(f, bouts) : null))
             .ToArray();
     }
 }

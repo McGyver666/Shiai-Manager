@@ -795,8 +795,7 @@ public sealed class ControllerUnitTests
             mockTournamentStore.Object,
             new Mock<ICategoryPresetsStore>().Object,
             mockBracketService.Object,
-            mockDokumePassParser.Object,
-            NullLogger<RegistrationsController>.Instance);
+            mockDokumePassParser.Object);
 
         var result = await controller.GetAllAsync(tournamentId, CancellationToken.None);
 
@@ -854,12 +853,8 @@ public sealed class ControllerUnitTests
             .ReturnsAsync(new Registration(registrationId, tournamentId, Guid.NewGuid(), newCategoryId, now));
 
         mockBracketService
-            .Setup(s => s.GenerateAsync(
-                tournamentId,
-                It.IsAny<Guid>(),
-                BracketFormat.SingleElimination,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Fight>());
+            .Setup(s => s.RefreshDrawAsync(tournamentId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var mockDokumePassParser = new Mock<IDokumePassParser>();
         var mockCategoryPresetsStore = new Mock<ICategoryPresetsStore>();
@@ -877,8 +872,7 @@ public sealed class ControllerUnitTests
             mockTournamentStore.Object,
             mockCategoryPresetsStore.Object,
             mockBracketService.Object,
-            mockDokumePassParser.Object,
-            NullLogger<RegistrationsController>.Instance);
+            mockDokumePassParser.Object);
 
         var result = await controller.AssignCategoryAsync(
             tournamentId,
@@ -890,19 +884,11 @@ public sealed class ControllerUnitTests
         Assert.Equal(StatusCodes.Status200OK, okResult.StatusCode);
 
         mockBracketService.Verify(
-            s => s.GenerateAsync(
-                tournamentId,
-                oldCategoryId,
-                BracketFormat.SingleElimination,
-                It.IsAny<CancellationToken>()),
+            s => s.RefreshDrawAsync(tournamentId, oldCategoryId, It.IsAny<CancellationToken>()),
             Times.Once);
 
         mockBracketService.Verify(
-            s => s.GenerateAsync(
-                tournamentId,
-                newCategoryId,
-                BracketFormat.SingleElimination,
-                It.IsAny<CancellationToken>()),
+            s => s.RefreshDrawAsync(tournamentId, newCategoryId, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -958,8 +944,7 @@ public sealed class ControllerUnitTests
             tournamentStore.Object,
             presetsStore.Object,
             bracketService.Object,
-            new Mock<IDokumePassParser>().Object,
-            NullLogger<RegistrationsController>.Instance);
+            new Mock<IDokumePassParser>().Object);
 
         var result = await controller.UpdateStartAgeGroupAsync(
             tournamentId,
@@ -1021,8 +1006,7 @@ public sealed class ControllerUnitTests
             tournamentStore.Object,
             presetsStore.Object,
             new Mock<IBracketService>().Object,
-            new Mock<IDokumePassParser>().Object,
-            NullLogger<RegistrationsController>.Instance);
+            new Mock<IDokumePassParser>().Object);
 
         var result = await controller.UpdateStartAgeGroupAsync(
             tournamentId,
@@ -1065,8 +1049,7 @@ public sealed class ControllerUnitTests
             tournamentStore.Object,
             presetsStore.Object,
             new Mock<IBracketService>().Object,
-            new Mock<IDokumePassParser>().Object,
-            NullLogger<RegistrationsController>.Instance);
+            new Mock<IDokumePassParser>().Object);
 
         var result = await controller.CreateAsync(
             tournamentId,
@@ -1221,8 +1204,7 @@ public sealed class ControllerUnitTests
             tournamentStore.Object,
             presetsStore.Object,
             new Mock<IBracketService>().Object,
-            new Mock<IDokumePassParser>().Object,
-            NullLogger<RegistrationsController>.Instance);
+            new Mock<IDokumePassParser>().Object);
         return new AssignmentScenario(controller, registrationsStore, registrationId);
     }
 

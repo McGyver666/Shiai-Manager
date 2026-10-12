@@ -39,6 +39,11 @@ public sealed class BracketService : IBracketService
             .ThenBy(r => r.AthleteId)
             .ToListAsync(cancellationToken);
 
+        if (format == BracketFormat.BestOfThree)
+        {
+            await ValidateBestOfThreeAsync(tournamentId, registrations.Count, cancellationToken);
+        }
+
         if (registrations.Count < 1)
             throw new InvalidOperationException(
             "Mindestens 1 Athlet ist für die Auslosung erforderlich.");
@@ -79,6 +84,10 @@ public sealed class BracketService : IBracketService
                     UpdatedAtUtc = utcNow
                 }
             };
+        }
+        else if (format == BracketFormat.BestOfThree)
+        {
+            fights = GenerateBestOfThreeFights(tournamentId, categoryId, shuffled[0], shuffled[1], utcNow);
         }
         else if (format == BracketFormat.RoundRobin)
         {
@@ -209,6 +218,67 @@ public sealed class BracketService : IBracketService
     }
 
     /// <inheritdoc />
+    public async Task RefreshDrawAsync(Guid tournamentId, Guid categoryId, CancellationToken cancellationToken)
+    {
+        var category = await _dbContext.Categories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == categoryId && c.TournamentId == tournamentId, cancellationToken);
+        if (category is null
+            || category.IsLocked
+            || !Enum.TryParse<BracketFormat>(category.DrawFormat, out var format))
+        {
+            return;
+        }
+
+        try
+        {
+            await GenerateAsync(tournamentId, categoryId, format, cancellationToken);
+        }
+        catch (LocalizedOperationException ex) when (format == BracketFormat.BestOfThree)
+        {
+            await DiscardDrawAsync(categoryId, cancellationToken);
+            _logger.LogInformation(
+                "Best-of-Three draw discarded for category {CategoryId}: {Reason}",
+                categoryId,
+                ex.Localized.Key);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogInformation(
+                ex,
+                "Automatic draw refresh skipped for category {CategoryId} in tournament {TournamentId}.",
+                categoryId,
+                tournamentId);
+        }
+    }
+
+    private async Task ValidateBestOfThreeAsync(Guid tournamentId, int athleteCount, CancellationToken cancellationToken)
+    {
+        var individual = await _dbContext.Tournaments
+            .AsNoTracking()
+            .AnyAsync(t => t.Id == tournamentId && t.CompetitionMode == CompetitionMode.Individual.ToString(), cancellationToken);
+        if (!individual)
+            throw new LocalizedOperationException(DrawMessages.BestOfThreeRequiresIndividualMode);
+
+        if (athleteCount != 2)
+            throw new LocalizedOperationException(DrawMessages.BestOfThreeRequiresTwoAthletes);
+    }
+
+    private async Task DiscardDrawAsync(Guid categoryId, CancellationToken cancellationToken)
+    {
+        var fights = await _dbContext.Fights
+            .Where(f => f.CategoryId == categoryId)
+            .ToListAsync(cancellationToken);
+        _dbContext.Fights.RemoveRange(fights);
+
+        var category = await _dbContext.Categories.FirstAsync(c => c.Id == categoryId, cancellationToken);
+        category.DrawFormat = null;
+        category.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<SwapResult> SwapAthletesAsync(
         Guid categoryId,
         Guid athleteId1,
@@ -277,6 +347,33 @@ public sealed class BracketService : IBracketService
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates bouts 1 and 2 of a Kampfserie; both always take place. The Entscheidungskampf is
+    /// created later by the match service when the Serienstand reaches 1:1.
+    /// </summary>
+    private static List<FightRecord> GenerateBestOfThreeFights(
+        Guid tournamentId,
+        Guid categoryId,
+        Guid whiteAthleteId,
+        Guid blueAthleteId,
+        DateTimeOffset utcNow) =>
+        Enumerable.Range(1, 2)
+            .Select(round => new FightRecord
+            {
+                Id = Guid.NewGuid(),
+                TournamentId = tournamentId,
+                CategoryId = categoryId,
+                BracketType = FightBracketType.Main.ToString(),
+                Round = round,
+                FightNumber = 1,
+                WhiteAthleteId = whiteAthleteId,
+                BlueAthleteId = blueAthleteId,
+                Status = FightStatus.Pending.ToString(),
+                CreatedAtUtc = utcNow,
+                UpdatedAtUtc = utcNow
+            })
+            .ToList();
 
     /// <summary>
     /// Generates a NWJV-style double-elimination graph for the smallest supported power of two.

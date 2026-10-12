@@ -41,6 +41,25 @@ public sealed class TatamiQueueService : ITatamiQueueService
             .Where(f => f.TournamentId == tournamentId && f.TatamiId == tatamiId)
             .ToListAsync(cancellationToken);
 
+        var seriesCategoryIds = records
+            .Where(f => BestOfThreeSeries.IsSeries(f.Category?.DrawFormat))
+            .Select(f => f.CategoryId)
+            .Distinct()
+            .ToList();
+        var seriesBouts = seriesCategoryIds.Count == 0
+            ? new Dictionary<Guid, List<FightRecord>>()
+            : (await _dbContext.Fights
+                    .AsNoTracking()
+                    .Where(f => seriesCategoryIds.Contains(f.CategoryId))
+                    .ToListAsync(cancellationToken))
+                .GroupBy(f => f.CategoryId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+        Fight Map(FightRecord r) => MapToModel(r) with
+        {
+            Series = seriesBouts.TryGetValue(r.CategoryId, out var bouts) ? BestOfThreeSeries.Describe(r, bouts) : null
+        };
+
         // In-progress fights first, then ready pending fights. Pending fights honor a manual
         // queue order (QueueOrder) when set, falling back to bracket order (Round, FightNumber).
         var playable = records
@@ -50,7 +69,7 @@ public sealed class TatamiQueueService : ITatamiQueueService
             .ThenBy(f => f.QueueOrder ?? int.MaxValue)
             .ThenBy(f => f.Round)
             .ThenBy(f => f.FightNumber)
-            .Select(MapToModel)
+            .Select(Map)
             .ToList();
 
         return new TatamiQueue(

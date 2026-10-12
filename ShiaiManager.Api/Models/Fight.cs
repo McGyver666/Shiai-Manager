@@ -45,6 +45,7 @@ namespace ShiaiManager.Api.Models;
 /// the fight is active (InProgress or Paused), golden score is enabled for the category,
 /// and the elapsed fight time has exceeded the regular match duration.
 /// </param>
+/// <param name="Series">Position and Serienstand within a Kampfserie; null for fights outside a series.</param>
 public sealed record Fight(
     Guid Id,
     Guid TournamentId,
@@ -83,4 +84,5 @@ public sealed record Fight(
     DateTimeOffset? CompletedAtUtc,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    bool IsGoldenScore);
+    bool IsGoldenScore,
+    FightSeries? Series = null);

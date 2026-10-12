@@ -30,5 +30,11 @@ public enum BracketFormat
     /// Group stage (two pools, round-robin within each pool) followed by a
     /// 4-athlete single-elimination knockout bracket. Top 2 per pool advance.
     /// </summary>
-    RoundRobinWithKnockout
+    RoundRobinWithKnockout,
+
+    /// <summary>
+    /// Kampfserie for exactly two athletes (individual mode only): the first to two wins takes the
+    /// series. Bouts 1 and 2 are drawn up front; the Entscheidungskampf is created only at 1:1 (ADR-0012).
+    /// </summary>
+    BestOfThree
 }

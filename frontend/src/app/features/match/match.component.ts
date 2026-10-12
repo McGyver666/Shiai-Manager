@@ -20,6 +20,8 @@ import { TournamentContextService } from '../../core/tournament-context.service'
 import { CategoryFightsUpdatedEvent, TournamentHubService } from '../../core/tournament-hub.service';
 import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
+import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
+import { seriesPositionText, seriesScoreSides, TranslatedText } from '../../core/fight-series';
 import {
   AdjustScoreRequest,
   Athlete,
@@ -46,7 +48,7 @@ interface WinnerConfirmationState {
 @Component({
   selector: 'app-match',
   standalone: true,
-  imports: [TranslatePipe, ShidoIndicatorComponent],
+  imports: [TranslatePipe, ShidoIndicatorComponent, RunningScoreComponent],
   templateUrl: './match.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './match.component.css',
@@ -909,6 +911,26 @@ export class MatchComponent implements OnInit, OnDestroy {
 
   protected confirmWinnerLabelKey(): string {
     return this.sideTheme.confirmWinnerLabelKey(this.context.tournament());
+  }
+
+  /** Serienstand in the operator layout (White left); null outside a Kampfserie. */
+  protected seriesScore(fight: Fight): RunningScoreSide[] | null {
+    return fight.series
+      ? seriesScoreSides(fight.series, 'white', this.sideTheme.accentSideColor(this.context.tournament()), (key) => this.i18n.translate(key))
+      : null;
+  }
+
+  protected seriesNote(fight: Fight): string | null {
+    if (!fight.series) {
+      return null;
+    }
+
+    const text = seriesPositionText(fight.series, 'ofTotal');
+    return this.i18n.translate(text.key, text.params);
+  }
+
+  protected seriesLabel(fight: Fight): TranslatedText | null {
+    return fight.series ? seriesPositionText(fight.series, 'inSeries') : null;
   }
 
   protected canRecordScore(fight: Fight): boolean {

@@ -84,8 +84,13 @@
             <div class="hero-center">
               <div class="hero-disc" aria-hidden="true"></div>
               <div class="hero-versus" aria-hidden="true">{{ 'tournamentOverview.versusMark' | t }}</div>
-              <div class="hero-fight-timer" [class.hero-fight-timer--paused]="isPaused(hero.fight)" [attr.aria-label]="'match.matchTimer' | t">
-                {{ timerForFight(hero.fight) }}
+              <div class="hero-clock">
+                @if (seriesScore(hero.fight); as sides) {
+                  <app-running-score [heading]="'series.heading' | t" [sides]="sides" size="compact" />
+                }
+                <div class="hero-fight-timer" [class.hero-fight-timer--paused]="isPaused(hero.fight)" [attr.aria-label]="'match.matchTimer' | t">
+                  {{ timerForFight(hero.fight) }}
+                </div>
               </div>
               @if (isOsaeKomiActive(hero.fight)) {
                 <div class="hero-osae" [class.hero-osae--accent]="hero.fight.osaeKomiSide === 'Blue'">
@@ -157,7 +162,7 @@
                 <span class="overview-status" [class]="statusClass(view)">{{ statusKey(view) | t }}</span>
               </header>
               @if (fight) {
-                <p class="tatami-category">{{ categoryName(fight.categoryId) }}</p>
+                <p class="tatami-category">{{ categoryName(fight.categoryId) }}@if (seriesLabel(fight); as label) {<span class="series-label"> · {{ label }}</span>}</p>
                 <div class="tatami-pairing">
                   <span class="pairing-accent">{{ athleteName(fight.blueAthleteId) }}</span>
                   <span class="pairing-vs">{{ 'common.vs' | t }}</span>
@@ -211,7 +216,8 @@
               <li class="queue-item">
                 <span class="queue-number">{{ i + 1 }}</span>
                 <div class="queue-content">
-                  <span class="queue-tatami">{{ entry.tatami.name }} · {{ categoryName(entry.fight.categoryId) }}</span>
+                  <span class="queue-tatami">{{ entry.tatami.name }} · {{ categoryName(entry.fight.categoryId) }}@if (seriesLabel(entry.fight); as label) { · {{ label }}
+                  }</span>
                   <strong>{{ athleteName(entry.fight.blueAthleteId) }}</strong>
                   <span>{{ 'common.vs' | t }} {{ athleteName(entry.fight.whiteAthleteId) }}</span>
                 </div>

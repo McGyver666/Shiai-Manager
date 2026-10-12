@@ -18,6 +18,9 @@ import { CategoryFightsUpdatedEvent, TournamentHubService } from '../../core/tou
 import { TranslatePipe } from '../../core/translate.pipe';
 import { Athlete, Category, Club, Fight, FightSide, Tatami, TatamiQueue, Tournament } from '../../core/models';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
+import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
+import { seriesScoreSides } from '../../core/fight-series';
+import { I18nService } from '../../core/i18n.service';
 
 interface TatamiDisplay {
   tatami: Tatami;
@@ -30,7 +33,7 @@ interface TatamiDisplay {
 @Component({
   selector: 'app-display',
   standalone: true,
-  imports: [TranslatePipe, ShidoIndicatorComponent],
+  imports: [TranslatePipe, ShidoIndicatorComponent, RunningScoreComponent],
   templateUrl: './display.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './display.component.css',
@@ -42,6 +45,7 @@ export class DisplayComponent implements OnInit, OnDestroy {
   private readonly time = inject(TimeService);
   private readonly route = inject(ActivatedRoute);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly i18n = inject(I18nService);
 
   protected readonly tournamentId = signal<string | null>(null);
   protected readonly tatamiModeTatamiId = signal<string | null>(null);
@@ -350,6 +354,13 @@ export class DisplayComponent implements OnInit, OnDestroy {
     return queue.upcoming
       .filter((fight) => fight.id !== currentId)
       .slice(0, 3);
+  }
+
+  /** Serienstand in the display layout (accent side left); null outside a Kampfserie. */
+  protected seriesScore(fight: Fight): RunningScoreSide[] | null {
+    return fight.series
+      ? seriesScoreSides(fight.series, 'blue', this.sideTheme.accentSideColor(this.tournament()), (key) => this.i18n.translate(key))
+      : null;
   }
 
   protected hasIppon(fight: Fight, side: FightSide): boolean {

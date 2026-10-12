@@ -9,6 +9,8 @@ import { TournamentContextService } from '../../core/tournament-context.service'
 import { TournamentHubService } from '../../core/tournament-hub.service';
 import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
+import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
+import { seriesPositionText, seriesScoreSides } from '../../core/fight-series';
 import { canAutoRotateHero, nextHeroIndex } from './overview-hero-state';
 
 interface TatamiView {
@@ -29,7 +31,7 @@ interface QueueFight {
 @Component({
   selector: 'app-tournament-overview',
   standalone: true,
-  imports: [TranslatePipe, ShidoIndicatorComponent],
+  imports: [TranslatePipe, ShidoIndicatorComponent, RunningScoreComponent],
   templateUrl: './tournament-overview.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './tournament-overview.component.css',
@@ -318,6 +320,23 @@ export class TournamentOverviewComponent implements OnDestroy {
 
   protected sideLabel(side: FightSide): string {
     return this.i18n.translate(this.sideTheme.sideLabelKey(side, this.tournament()));
+  }
+
+  /** Serienstand in the hero layout (accent side left); null outside a Kampfserie. */
+  protected seriesScore(fight: Fight): RunningScoreSide[] | null {
+    return fight.series
+      ? seriesScoreSides(fight.series, 'blue', this.sideTheme.accentSideColor(this.tournament()), (key) => this.i18n.translate(key))
+      : null;
+  }
+
+  /** "Kampf n der Serie" / "Entscheidungskampf"; null outside a Kampfserie. */
+  protected seriesLabel(fight: Fight): string | null {
+    if (!fight.series) {
+      return null;
+    }
+
+    const text = seriesPositionText(fight.series, 'inSeries');
+    return this.i18n.translate(text.key, text.params);
   }
 
   protected fighterSideLabel(): string {

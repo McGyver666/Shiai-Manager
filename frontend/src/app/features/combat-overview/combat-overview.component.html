@@ -79,7 +79,7 @@
             </td>
             <td>{{ fight.categoryName }}</td>
             <td>{{ fight.tatamiName ?? '–' }}</td>
-            <td>{{ bracketTypeKey(fight) | t }} · {{ 'draw.round' | t: { n: fight.round } }} · #{{ fight.fightNumber }}</td>
+            <td>{{ fightLabel(fight) }}</td>
             <td [class.winner]="fight.winnerSide === 'White'">
               <span class="athlete">{{ fight.whiteAthleteName }}</span>
               @if (fight.winnerSide === 'White') { <span class="win-mark" aria-hidden="true">✓</span> }
@@ -163,7 +163,7 @@
                     }
                     @if (editState()?.affectedFights && editState()!.affectedFights!.length > 0) {
                       <div class="warn-panel">
-                        <p class="warn-text">{{ 'combatOverview.edit.warnAffected' | t }}</p>
+                        <p class="warn-text">{{ (fight.series ? 'combatOverview.edit.warnDecidingFightRemoved' : 'combatOverview.edit.warnAffected') | t }}</p>
                         <ul>
                           @for (af of editState()!.affectedFights!; track af.fightId) {
                             <li>{{ af.categoryName }} — {{ 'draw.round' | t: { n: af.round } }} #{{ af.fightNumber }} ({{ af.status }})</li>
