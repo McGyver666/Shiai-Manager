@@ -39,6 +39,10 @@ import {
 const OPERATOR_NAME_KEY = 'judo.operatorName';
 const KEYBOARD_BLOCKED_SELECTORS = 'input, textarea, select, dialog, [contenteditable]:not([contenteditable="false" i]), [role="dialog"], [aria-modal="true"]';
 
+function isSpaceKey(event: KeyboardEvent): boolean {
+  return event.code === 'Space' || event.key === ' ';
+}
+
 interface WinnerConfirmationState {
   fight: Fight;
   winnerId: string | null;
@@ -89,6 +93,8 @@ export class MatchComponent implements OnInit, OnDestroy {
   protected readonly osaeKomiPaused = signal(false);
   private timerHandle: ReturnType<typeof setInterval> | null = null;
   private lastClockResyncCheckAtMs = 0;
+  /** Some browsers activate a focused button on Space keyup, so a handled Space keydown also cancels its keyup. */
+  private suppressSpaceKeyup = false;
 
   /** Track the previous fight to detect osae-komi transitions and cleanup. */
   private previousFight: Fight | null = null;
@@ -293,6 +299,11 @@ export class MatchComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown', ['$event'])
   protected onKeyboardShortcut(event: KeyboardEvent): void {
+    const isSpace = isSpaceKey(event);
+    if (isSpace && !event.repeat) {
+      this.suppressSpaceKeyup = false;
+    }
+
     if (event.defaultPrevented || event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
       return;
     }
@@ -310,7 +321,7 @@ export class MatchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const key = event.code === 'Space' || event.key === ' ' ? 'space' : event.key.toLowerCase();
+    const key = isSpace ? 'space' : event.key.toLowerCase();
     let action: (() => void) | null = null;
 
     switch (key) {
@@ -345,7 +356,18 @@ export class MatchComponent implements OnInit, OnDestroy {
     }
 
     event.preventDefault();
+    this.suppressSpaceKeyup = isSpace;
     action();
+  }
+
+  @HostListener('document:keyup', ['$event'])
+  protected onKeyboardShortcutKeyup(event: KeyboardEvent): void {
+    if (!this.suppressSpaceKeyup || !isSpaceKey(event)) {
+      return;
+    }
+
+    this.suppressSpaceKeyup = false;
+    event.preventDefault();
   }
 
   private isKeyboardShortcutBlocked(event: KeyboardEvent): boolean {

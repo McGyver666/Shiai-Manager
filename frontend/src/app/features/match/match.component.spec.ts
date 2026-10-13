@@ -13,6 +13,8 @@ import { TournamentContextService } from '../../core/tournament-context.service'
 import { TournamentHubService } from '../../core/tournament-hub.service';
 import { MatchComponent } from './match.component';
 
+const ENABLED_SCORE_BUTTON = '.btn--positive:not(:disabled)';
+
 describe('MatchComponent', () => {
   let fightUpdates: Subject<Fight>;
   let categoryFightsUpdates: Subject<{
@@ -24,7 +26,6 @@ describe('MatchComponent', () => {
   let startFightSpy: Mock;
   let pauseFightSpy: Mock;
   let resumeFightSpy: Mock;
-  let adjustScoreSpy: Mock;
   let startOsaeKomiSpy: Mock;
   let stopOsaeKomiSpy: Mock;
   let tournamentSignal: WritableSignal<Tournament>;
@@ -106,6 +107,16 @@ describe('MatchComponent', () => {
     };
   }
 
+  function queueWith(fight: Fight): TatamiQueue {
+    return { current: fight, next: null, onDeck: null, upcoming: [] } as TatamiQueue;
+  }
+
+  function pressKey(target: EventTarget, key: string, type: 'keydown' | 'keyup' = 'keydown'): KeyboardEvent {
+    const event = new KeyboardEvent(type, { key, code: key === ' ' ? 'Space' : '', bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  }
+
   beforeEach(() => {
     fightUpdates = new Subject<Fight>();
     categoryFightsUpdates = new Subject<{
@@ -148,7 +159,6 @@ describe('MatchComponent', () => {
       startFight: vi.fn().mockName('startFight').mockReturnValue(of(undefined)),
       pauseFight: vi.fn().mockName('pauseFight').mockReturnValue(of(undefined)),
       resumeFight: vi.fn().mockName('resumeFight').mockReturnValue(of(undefined)),
-      adjustScore: vi.fn().mockName('adjustScore').mockReturnValue(of(undefined)),
       startOsaeKomi: vi.fn().mockName('startOsaeKomi').mockReturnValue(of(undefined)),
       stopOsaeKomi: vi.fn().mockName('stopOsaeKomi').mockReturnValue(of(undefined)),
     };
@@ -158,7 +168,6 @@ describe('MatchComponent', () => {
     startFightSpy = apiMock.startFight as Mock;
     pauseFightSpy = apiMock.pauseFight as Mock;
     resumeFightSpy = apiMock.resumeFight as Mock;
-    adjustScoreSpy = apiMock.adjustScore as Mock;
     startOsaeKomiSpy = apiMock.startOsaeKomi as Mock;
     stopOsaeKomiSpy = apiMock.stopOsaeKomi as Mock;
 
@@ -252,78 +261,76 @@ describe('MatchComponent', () => {
     fixture.destroy();
   });
 
-  it('handles the space bar for every active fight state when a score button is focused', () => {
+  it.each([
+    { status: 'Pending', fight: { status: 'Pending', startedAtUtc: null, completedAtUtc: null }, focusSelector: '.btn--fight-start-stop', clockSpy: () => startFightSpy },
+    { status: 'Paused', fight: { status: 'Paused' }, focusSelector: ENABLED_SCORE_BUTTON, clockSpy: () => resumeFightSpy },
+    { status: 'InProgress', fight: { status: 'InProgress' }, focusSelector: ENABLED_SCORE_BUTTON, clockSpy: () => pauseFightSpy },
+  ] satisfies { status: string; fight: Partial<Fight>; focusSelector: string; clockSpy: () => Mock }[])(
+    'controls a $status fight clock with the space bar while a button is focused',
+    ({ fight, focusSelector, clockSpy }) => {
+      getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight(fight))));
+      const fixture = TestBed.createComponent(MatchComponent);
+      fixture.detectChanges();
+
+      const button = fixture.nativeElement.querySelector(focusSelector) as HTMLButtonElement;
+      button.focus();
+      expect(document.activeElement).toBe(button);
+
+      const keydown = pressKey(button, ' ');
+      const keyup = pressKey(button, ' ', 'keyup');
+
+      expect(clockSpy()).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+      expect(keydown.defaultPrevented).toBe(true);
+      // Browsers activate a focused button on Space keyup; cancelling it keeps the button from firing.
+      expect(keyup.defaultPrevented).toBe(true);
+
+      fixture.destroy();
+    },
+  );
+
+  it('leaves Enter and unhandled space keyups to a focused button', () => {
+    getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight({ status: 'InProgress' }))));
     const fixture = TestBed.createComponent(MatchComponent);
-    const component = fixture.componentInstance as any;
-    getTatamiQueueSpy.mockReturnValue(of({
-      current: createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }),
-      next: null,
-      onDeck: null,
-      upcoming: [],
-    } as TatamiQueue));
     fixture.detectChanges();
 
-    const scoreButton = fixture.nativeElement.querySelector('.btn--positive') as HTMLButtonElement;
+    const scoreButton = fixture.nativeElement.querySelector(ENABLED_SCORE_BUTTON) as HTMLButtonElement;
     scoreButton.focus();
-    const startEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(startEvent);
-    expect(startFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
-    expect(startEvent.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(scoreButton);
+    const enter = pressKey(scoreButton, 'Enter');
+    const keyup = pressKey(scoreButton, ' ', 'keyup');
 
-    component.queue.set({
-      current: createFight({ status: 'Paused' }),
-      next: null,
-      onDeck: null,
-      upcoming: [],
-    });
-    const resumeEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(resumeEvent);
-    expect(resumeFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
-    expect(resumeEvent.defaultPrevented).toBe(true);
-
-    component.queue.set({
-      current: createFight({ status: 'InProgress' }),
-      next: null,
-      onDeck: null,
-      upcoming: [],
-    });
-    const pauseEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(pauseEvent);
-    expect(pauseFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
-    expect(pauseEvent.defaultPrevented).toBe(true);
-    expect(adjustScoreSpy).not.toHaveBeenCalled();
-
-    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(enterEvent);
-    expect(enterEvent.defaultPrevented).toBe(false);
+    expect(enter.defaultPrevented).toBe(false);
+    expect(keyup.defaultPrevented).toBe(false);
+    expect(pauseFightSpy).not.toHaveBeenCalled();
 
     fixture.destroy();
   });
 
-  it('starts and stops Osae-komi with S, F, and D without touching the fight clock', () => {
+  it.each([
+    { focus: 'no focused element', focusScoreButton: false },
+    { focus: 'a focused score button', focusScoreButton: true },
+  ])('starts and stops Osae-komi with S, F, and D without touching the fight clock ($focus)', ({ focusScoreButton }) => {
     tournamentSignal.update((tournament) => ({ ...tournament, accentSideColor: 'Red' }));
     const fixture = TestBed.createComponent(MatchComponent);
     const component = fixture.componentInstance as any;
-    const fight = createFight({ status: 'InProgress' });
-    getTatamiQueueSpy.mockReturnValue(of({ current: fight, next: null, onDeck: null, upcoming: [] } as TatamiQueue));
+    getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight({ status: 'InProgress' }))));
     fixture.detectChanges();
 
-    const scoreButton = fixture.nativeElement.querySelector('.btn--positive') as HTMLButtonElement;
-    scoreButton.focus();
-    const whiteEvent = new KeyboardEvent('keydown', { key: 's', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(whiteEvent);
-    const blueEvent = new KeyboardEvent('keydown', { key: 'f', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(blueEvent);
+    let target: EventTarget = document;
+    if (focusScoreButton) {
+      const scoreButton = fixture.nativeElement.querySelector(ENABLED_SCORE_BUTTON) as HTMLButtonElement;
+      scoreButton.focus();
+      expect(document.activeElement).toBe(scoreButton);
+      target = scoreButton;
+    }
+    const events = [pressKey(target, 's'), pressKey(target, 'f')];
     component.osaeKomiSide.set('white');
-    const stopEvent = new KeyboardEvent('keydown', { key: 'd', bubbles: true, cancelable: true });
-    scoreButton.dispatchEvent(stopEvent);
+    events.push(pressKey(target, 'd'));
 
     expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white' }, expect.any(String));
     expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'blue' }, expect.any(String));
     expect(stopOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
-    expect(whiteEvent.defaultPrevented).toBe(true);
-    expect(blueEvent.defaultPrevented).toBe(true);
-    expect(stopEvent.defaultPrevented).toBe(true);
+    expect(events.every((event) => event.defaultPrevented)).toBe(true);
     expect(pauseFightSpy).not.toHaveBeenCalled();
     expect(resumeFightSpy).not.toHaveBeenCalled();
     fixture.destroy();
@@ -347,31 +354,30 @@ describe('MatchComponent', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
     auth.canOperate.set(true);
 
-    const editableContent = ['true', '', 'plaintext-only'].map((value) => {
+    const editableElements = ['true', '', 'plaintext-only'].map((value) => {
       const element = document.createElement('div');
       element.setAttribute('contenteditable', value);
       return element;
     });
-    const blockedInputEvents = [
+    const blockedTargets = [
       document.createElement('input'),
       document.createElement('textarea'),
       document.createElement('select'),
-      ...editableContent,
-    ].map((element) => {
+      ...editableElements,
+    ];
+    const blockedEvents = blockedTargets.map((element) => {
       document.body.appendChild(element);
       element.focus();
-      const event = new KeyboardEvent('keydown', { key: ' ', cancelable: true });
-      document.dispatchEvent(event);
-      return { element, event };
+      return pressKey(element, ' ');
     });
 
     expect(startFightSpy).not.toHaveBeenCalled();
     expect(pauseFightSpy).not.toHaveBeenCalled();
     expect(startOsaeKomiSpy).not.toHaveBeenCalled();
     expect(stopOsaeKomiSpy).not.toHaveBeenCalled();
-    expect(blockedInputEvents.map(({ event }) => event.defaultPrevented)).toEqual([false, false, false, false, false, false]);
+    expect(blockedEvents.every((event) => !event.defaultPrevented)).toBe(true);
 
-    blockedInputEvents.forEach(({ element }) => element.remove());
+    blockedTargets.forEach((element) => element.remove());
     fixture.destroy();
   });
 
