@@ -310,11 +310,13 @@
 
 .series-fights {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 220px;
-  max-width: 360px;
-  width: 100%;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+}
+
+/* Same width as a bracket round column. */
+.series-fights .fight {
+  width: 200px;
 }
 
 @media (max-width: 900px) {
