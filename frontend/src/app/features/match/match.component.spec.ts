@@ -24,7 +24,7 @@ describe('MatchComponent', () => {
   let getTatamiQueueSpy: Mock;
   let getAthletesSpy: Mock;
   let startFightSpy: Mock;
-  let pauseFightSpy: Mock;
+  let stopFightSpy: Mock;
   let resumeFightSpy: Mock;
   let startOsaeKomiSpy: Mock;
   let stopOsaeKomiSpy: Mock;
@@ -108,8 +108,8 @@ describe('MatchComponent', () => {
     };
   }
 
-  function queueWith(fight: Fight): TatamiQueue {
-    return { current: fight, next: null, onDeck: null, upcoming: [] } as TatamiQueue;
+  function queueWith(fight: Fight, upcoming: Fight[] = []): TatamiQueue {
+    return { current: fight, next: upcoming[0] ?? null, onDeck: upcoming[1] ?? null, upcoming } as TatamiQueue;
   }
 
   function pressKey(target: EventTarget, key: string, type: 'keydown' | 'keyup' = 'keydown'): KeyboardEvent {
@@ -158,7 +158,7 @@ describe('MatchComponent', () => {
         upcoming: [],
       } as TatamiQueue)),
       startFight: vi.fn().mockName('startFight').mockReturnValue(of(undefined)),
-      pauseFight: vi.fn().mockName('pauseFight').mockReturnValue(of(undefined)),
+      stopFight: vi.fn().mockName('stopFight').mockReturnValue(of(undefined)),
       resumeFight: vi.fn().mockName('resumeFight').mockReturnValue(of(undefined)),
       startOsaeKomi: vi.fn().mockName('startOsaeKomi').mockReturnValue(of(undefined)),
       stopOsaeKomi: vi.fn().mockName('stopOsaeKomi').mockReturnValue(of(undefined)),
@@ -172,7 +172,7 @@ describe('MatchComponent', () => {
     getTatamiQueueSpy = apiMock.getTatamiQueue as Mock;
     getAthletesSpy = apiMock.getAthletes as Mock;
     startFightSpy = apiMock.startFight as Mock;
-    pauseFightSpy = apiMock.pauseFight as Mock;
+    stopFightSpy = apiMock.stopFight as Mock;
     resumeFightSpy = apiMock.resumeFight as Mock;
     startOsaeKomiSpy = apiMock.startOsaeKomi as Mock;
     stopOsaeKomiSpy = apiMock.stopOsaeKomi as Mock;
@@ -180,7 +180,7 @@ describe('MatchComponent', () => {
     TestBed.configureTestingModule({
       providers: [
         { provide: ApiService, useValue: apiMock },
-        { provide: AuthStateService, useValue: { canOperate: signal(true), canOperateLive: signal(true) } },
+        { provide: AuthStateService, useValue: { canOperateLive: signal(true) } },
         {
           provide: TournamentContextService,
           useValue: {
@@ -220,15 +220,13 @@ describe('MatchComponent', () => {
   describe('live operation rights', () => {
     const CONTROL_SELECTORS = '.fight-controls button, .score-row__actions button, .osae-card__controls button, .confirm-row button, .upcoming-item__move';
 
-    function useAuth(canOperate: boolean, canOperateLive: boolean): void {
-      TestBed.overrideProvider(AuthStateService, {
-        useValue: { canOperate: signal(canOperate), canOperateLive: signal(canOperateLive) },
-      });
-    }
+    const UPCOMING = [createFight({ id: 'fight-2', status: 'Pending' }), createFight({ id: 'fight-3', status: 'Pending' })];
 
-    function queueOf(current: Fight): TatamiQueue {
-      const upcoming = [createFight({ id: 'fight-2', status: 'Pending' }), createFight({ id: 'fight-3', status: 'Pending' })];
-      return { current, next: upcoming[0], onDeck: upcoming[1], upcoming } as TatamiQueue;
+    // Neither Competition nor a role without live rights may use the management pages.
+    function useLiveOperationRight(canOperateLive: boolean): void {
+      TestBed.overrideProvider(AuthStateService, {
+        useValue: { canOperate: signal(false), canOperateLive: signal(canOperateLive) },
+      });
     }
 
     function button(fixture: { nativeElement: HTMLElement }, selector: string): HTMLButtonElement {
@@ -254,22 +252,22 @@ describe('MatchComponent', () => {
     });
 
     describe('as Competition (live operation without management rights)', () => {
-      beforeEach(() => useAuth(false, true));
+      beforeEach(() => useLiveOperationRight(true));
 
       it('starts a pending fight via button and space bar', () => {
-        getTatamiQueueSpy.mockReturnValue(of(queueOf(createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }))));
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
         clickEnabled(fixture, '.fight-controls button');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', cancelable: true }));
+        pressKey(document, ' ');
 
         expect(startFightSpy).toHaveBeenCalledTimes(2);
         fixture.destroy();
       });
 
       it('stops a running fight, records and removes scores, starts Osae-komi, and reorders the queue', () => {
-        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight())));
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight(), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -287,12 +285,25 @@ describe('MatchComponent', () => {
         expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white' }, expect.any(String));
         expect(apiMock.moveFightInQueue).toHaveBeenCalledWith('tournament-1', 'fight-2', 'Down');
         expect(apiMock.moveFightInQueue).toHaveBeenCalledWith('tournament-1', 'fight-3', 'Up');
-        expect(pauseFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+        expect(stopFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+        fixture.destroy();
+      });
+
+      it('starts Osae-komi for either side with the S and F shortcuts', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight())));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        const events = [pressKey(document, 's'), pressKey(document, 'f')];
+
+        expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white' }, expect.any(String));
+        expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'blue' }, expect.any(String));
+        expect(events.every((event) => event.defaultPrevented)).toBe(true);
         fixture.destroy();
       });
 
       it('controls an active Osae-komi via buttons and the D shortcut', () => {
-        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight({
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight({
           osaeKomiSide: 'White',
           osaeKomiStartedAtUtc: new Date().toISOString(),
         }))));
@@ -304,15 +315,34 @@ describe('MatchComponent', () => {
         expect(toggle.disabled).toBe(false);
         toggle.click();
         stop.click();
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', cancelable: true }));
+        pressKey(document, 'd');
 
         expect(apiMock.pauseOsaeKomi).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
         expect(stopOsaeKomiSpy).toHaveBeenCalledTimes(2);
         fixture.destroy();
       });
 
+      it('resumes a paused Osae-komi (Yoshi)', () => {
+        const startedAt = new Date(Date.now() - 5000).toISOString();
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight({
+          osaeKomiSide: 'White',
+          osaeKomiStartedAtUtc: startedAt,
+          osaeKomiPausedAtUtc: new Date().toISOString(),
+        }))));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        const [, , toggle] = Array.from(fixture.nativeElement.querySelectorAll('.osae-card__controls button')) as HTMLButtonElement[];
+        expect(toggle.disabled).toBe(false);
+        toggle.click();
+
+        expect(apiMock.resumeOsaeKomi).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+        expect(apiMock.pauseOsaeKomi).not.toHaveBeenCalled();
+        fixture.destroy();
+      });
+
       it('resumes a paused fight', () => {
-        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight({ status: 'Paused' }))));
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight({ status: 'Paused' }))));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -324,7 +354,7 @@ describe('MatchComponent', () => {
 
       it('confirms a winner and a Hiki-wake through the confirmation dialog', () => {
         tournamentSignal.update((tournament) => ({ ...tournament, competitionMode: 'TeamMatchday' }));
-        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight())));
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight())));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -340,15 +370,15 @@ describe('MatchComponent', () => {
     });
 
     describe('without live operation rights', () => {
-      beforeEach(() => useAuth(false, false));
+      beforeEach(() => useLiveOperationRight(false));
 
-      it.each([
-        { status: 'Pending', fight: { status: 'Pending', startedAtUtc: null, completedAtUtc: null } },
-        { status: 'InProgress', fight: { status: 'InProgress', completedAtUtc: null, whiteIpponCount: 0, whiteWazaAriCount: 1 } },
-        { status: 'Paused', fight: { status: 'Paused', completedAtUtc: null, whiteIpponCount: 0, whiteWazaAriCount: 1 } },
-      ] satisfies { status: string; fight: Partial<Fight> }[])('disables every control and ignores shortcuts for a $status fight', ({ fight }) => {
+      it.each<Partial<Fight>>([
+        { status: 'Pending', startedAtUtc: null, completedAtUtc: null },
+        { status: 'InProgress', completedAtUtc: null, whiteIpponCount: 0, whiteWazaAriCount: 1 },
+        { status: 'Paused', completedAtUtc: null, whiteIpponCount: 0, whiteWazaAriCount: 1 },
+      ])('disables every control and ignores shortcuts for a $status fight', (fight) => {
         tournamentSignal.update((tournament) => ({ ...tournament, competitionMode: 'TeamMatchday' }));
-        getTatamiQueueSpy.mockReturnValue(of(queueOf(createFight(fight))));
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight(fight), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -360,7 +390,7 @@ describe('MatchComponent', () => {
 
         expect(events.some((event) => event.defaultPrevented)).toBe(false);
         expect(startFightSpy).not.toHaveBeenCalled();
-        expect(pauseFightSpy).not.toHaveBeenCalled();
+        expect(stopFightSpy).not.toHaveBeenCalled();
         expect(resumeFightSpy).not.toHaveBeenCalled();
         expect(startOsaeKomiSpy).not.toHaveBeenCalled();
         expect(stopOsaeKomiSpy).not.toHaveBeenCalled();
@@ -404,7 +434,7 @@ describe('MatchComponent', () => {
     fixture.detectChanges();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
 
-    expect(pauseFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+    expect(stopFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
 
     component.queue.set({
       current: createFight({ status: 'Paused' }),
@@ -422,7 +452,7 @@ describe('MatchComponent', () => {
   it.each([
     { status: 'Pending', fight: { status: 'Pending', startedAtUtc: null, completedAtUtc: null }, focusSelector: '.btn--fight-start-stop', clockSpy: () => startFightSpy },
     { status: 'Paused', fight: { status: 'Paused' }, focusSelector: ENABLED_SCORE_BUTTON, clockSpy: () => resumeFightSpy },
-    { status: 'InProgress', fight: { status: 'InProgress' }, focusSelector: ENABLED_SCORE_BUTTON, clockSpy: () => pauseFightSpy },
+    { status: 'InProgress', fight: { status: 'InProgress' }, focusSelector: ENABLED_SCORE_BUTTON, clockSpy: () => stopFightSpy },
   ] satisfies { status: string; fight: Partial<Fight>; focusSelector: string; clockSpy: () => Mock }[])(
     'controls a $status fight clock with the space bar while a button is focused',
     ({ fight, focusSelector, clockSpy }) => {
@@ -459,7 +489,7 @@ describe('MatchComponent', () => {
 
     expect(enter.defaultPrevented).toBe(false);
     expect(keyup.defaultPrevented).toBe(false);
-    expect(pauseFightSpy).not.toHaveBeenCalled();
+    expect(stopFightSpy).not.toHaveBeenCalled();
 
     fixture.destroy();
   });
@@ -489,7 +519,7 @@ describe('MatchComponent', () => {
     expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'blue' }, expect.any(String));
     expect(stopOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
     expect(events.every((event) => event.defaultPrevented)).toBe(true);
-    expect(pauseFightSpy).not.toHaveBeenCalled();
+    expect(stopFightSpy).not.toHaveBeenCalled();
     expect(resumeFightSpy).not.toHaveBeenCalled();
     fixture.destroy();
   });
@@ -530,7 +560,7 @@ describe('MatchComponent', () => {
     });
 
     expect(startFightSpy).not.toHaveBeenCalled();
-    expect(pauseFightSpy).not.toHaveBeenCalled();
+    expect(stopFightSpy).not.toHaveBeenCalled();
     expect(startOsaeKomiSpy).not.toHaveBeenCalled();
     expect(stopOsaeKomiSpy).not.toHaveBeenCalled();
     expect(blockedEvents.every((event) => !event.defaultPrevented)).toBe(true);
@@ -624,7 +654,7 @@ describe('MatchComponent', () => {
     fixture.detectChanges();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
 
-    expect(pauseFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+    expect(stopFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
     fixture.destroy();
   });
 

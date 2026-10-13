@@ -601,13 +601,6 @@ export interface TournamentOverviewStats {
   ipponCount: number;
 }
 
-export interface RecordScoreRequest {
-  whiteScore: number;
-  blueScore: number;
-  whitePenalties: number;
-  bluePenalties: number;
-}
-
 export interface AdjustScoreRequest {
   side: FightSide;
   scoreType: ScoreType;
