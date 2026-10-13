@@ -108,6 +108,17 @@ describe('MatchComponent', () => {
     };
   }
 
+  function pendingFight(overrides: Partial<Fight> = {}): Fight {
+    return createFight({
+      status: 'Pending',
+      startedAtUtc: null,
+      completedAtUtc: null,
+      whiteScore: 0,
+      whiteIpponCount: 0,
+      ...overrides,
+    });
+  }
+
   function queueWith(fight: Fight, upcoming: Fight[] = []): TatamiQueue {
     return { current: fight, next: upcoming[0] ?? null, onDeck: upcoming[1] ?? null, upcoming } as TatamiQueue;
   }
@@ -255,7 +266,7 @@ describe('MatchComponent', () => {
       beforeEach(() => useLiveOperationRight(true));
 
       it('starts a pending fight via button and space bar', () => {
-        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }), UPCOMING)));
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(pendingFight(), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -266,8 +277,8 @@ describe('MatchComponent', () => {
         fixture.destroy();
       });
 
-      it('promotes the first queued fight to the current slot while the current fight has not started', () => {
-        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }), UPCOMING)));
+      it('requests moving the first queued fight up while the current fight has not started', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(pendingFight(), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -277,11 +288,21 @@ describe('MatchComponent', () => {
         fixture.destroy();
       });
 
+      it('keeps the first queued fight in the queue while its athletes are not yet known', () => {
+        const unresolved = pendingFight({ id: 'fight-2', blueAthleteId: null });
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(pendingFight(), [unresolved])));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        expect(button(fixture, '.upcoming-item__move').disabled).toBe(true);
+        fixture.destroy();
+      });
+
       it.each<Partial<Fight>>([
         { status: 'InProgress', completedAtUtc: null },
         { status: 'Paused', completedAtUtc: null },
-      ])('keeps the first queued fight in the queue while the current fight is $status', (fight) => {
-        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight(fight), UPCOMING)));
+      ])('keeps the first queued fight in the queue while the current fight is $status', (overrides) => {
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight(overrides), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);
         fixture.detectChanges();
 
@@ -424,7 +445,7 @@ describe('MatchComponent', () => {
 
   it('starts a pending fight with the space bar and refreshes the queue', () => {
     getTatamiQueueSpy.mockReturnValue(of({
-      current: createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }),
+      current: pendingFight(),
       next: null,
       onDeck: null,
       upcoming: [],
@@ -619,7 +640,7 @@ describe('MatchComponent', () => {
   it('ignores shortcuts without a selected tatami, tournament, or outside a modal dialog', () => {
     const fixture = TestBed.createComponent(MatchComponent);
     const component = fixture.componentInstance as any;
-    const fight = createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null });
+    const fight = pendingFight();
     getTatamiQueueSpy.mockReturnValue(of({ current: fight, next: null, onDeck: null, upcoming: [] } as TatamiQueue));
     fixture.detectChanges();
 
@@ -646,7 +667,7 @@ describe('MatchComponent', () => {
 
   it('uses the existing error path when a keyboard action fails', () => {
     getTatamiQueueSpy.mockReturnValue(of({
-      current: createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }),
+      current: pendingFight(),
       next: null,
       onDeck: null,
       upcoming: [],

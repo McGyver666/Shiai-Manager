@@ -91,6 +91,38 @@ public sealed class TatamiQueueServiceTests
             .ToListAsync();
     }
 
+    private sealed record AssignedRoundOne(string Db, Guid TournamentId, Guid TatamiId, List<FightRecord> Fights);
+
+    /// <summary>Seeds 8 athletes and assigns all four round-one fights to one tatami.</summary>
+    private static async Task<AssignedRoundOne> SeedRoundOneOnTatamiAsync()
+    {
+        var db = CreateDatabasePath();
+        Guid tid, cid, tatamiId;
+        await using (var ctx = CreateDbContext(db))
+        {
+            await ctx.Database.EnsureCreatedAsync();
+            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
+        }
+
+        var roundOne = await RoundOneFightsAsync(db, cid);
+
+        await using (var ctx = CreateDbContext(db))
+        {
+            var match = CreateMatchService(ctx);
+            foreach (var f in roundOne)
+                await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
+        }
+
+        return new AssignedRoundOne(db, tid, tatamiId, roundOne);
+    }
+
+    private static async Task<TatamiQueue> GetQueueAsync(AssignedRoundOne seeded)
+    {
+        await using var ctx = CreateDbContext(seeded.Db);
+        var queue = await new TatamiQueueService(ctx).GetQueueAsync(seeded.TournamentId, seeded.TatamiId, CancellationToken.None);
+        return queue!;
+    }
+
     [Fact]
     [Trait("Category", "UnitTest")]
     public async Task GetQueue_UnknownTatami_ReturnsNull()
@@ -388,30 +420,19 @@ public sealed class TatamiQueueServiceTests
     [Trait("Category", "UnitTest")]
     public async Task MoveInQueue_Down_SwapsPendingFightWithNextInQueue()
     {
-        var db = CreateDatabasePath();
-        Guid tid, cid, tatamiId;
-        await using (var ctx = CreateDbContext(db))
-        {
-            await ctx.Database.EnsureCreatedAsync();
-            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
-        }
+        var seeded = await SeedRoundOneOnTatamiAsync();
+        var roundOne = seeded.Fights;
 
-        var roundOne = await RoundOneFightsAsync(db, cid);
-
-        await using (var ctx = CreateDbContext(db))
+        await using (var ctx = CreateDbContext(seeded.Db))
         {
-            var match = CreateMatchService(ctx);
-            foreach (var f in roundOne)
-                await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
             // Move the first fight down: it should trade places with the second.
-            var result = await match.MoveInQueueAsync(roundOne[0].Id, QueueMoveDirection.Down, "Admin", CancellationToken.None);
+            var result = await CreateMatchService(ctx).MoveInQueueAsync(roundOne[0].Id, QueueMoveDirection.Down, "Admin", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
-        await using var ctx2 = CreateDbContext(db);
-        var queue = await new TatamiQueueService(ctx2).GetQueueAsync(tid, tatamiId, CancellationToken.None);
+        var queue = await GetQueueAsync(seeded);
 
-        Assert.Equal(roundOne[1].Id, queue!.Current!.Id);
+        Assert.Equal(roundOne[1].Id, queue.Current!.Id);
         Assert.Equal(roundOne[0].Id, queue.Next!.Id);
         Assert.Equal(roundOne[2].Id, queue.OnDeck!.Id);
     }
@@ -420,30 +441,19 @@ public sealed class TatamiQueueServiceTests
     [Trait("Category", "UnitTest")]
     public async Task MoveInQueue_Up_SwapsPendingFightWithPreviousInQueue()
     {
-        var db = CreateDatabasePath();
-        Guid tid, cid, tatamiId;
-        await using (var ctx = CreateDbContext(db))
-        {
-            await ctx.Database.EnsureCreatedAsync();
-            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
-        }
+        var seeded = await SeedRoundOneOnTatamiAsync();
+        var roundOne = seeded.Fights;
 
-        var roundOne = await RoundOneFightsAsync(db, cid);
-
-        await using (var ctx = CreateDbContext(db))
+        await using (var ctx = CreateDbContext(seeded.Db))
         {
-            var match = CreateMatchService(ctx);
-            foreach (var f in roundOne)
-                await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
             // Move the third fight up: it should trade places with the second.
-            var result = await match.MoveInQueueAsync(roundOne[2].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
+            var result = await CreateMatchService(ctx).MoveInQueueAsync(roundOne[2].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
-        await using var ctx2 = CreateDbContext(db);
-        var queue = await new TatamiQueueService(ctx2).GetQueueAsync(tid, tatamiId, CancellationToken.None);
+        var queue = await GetQueueAsync(seeded);
 
-        Assert.Equal(roundOne[0].Id, queue!.Current!.Id);
+        Assert.Equal(roundOne[0].Id, queue.Current!.Id);
         Assert.Equal(roundOne[2].Id, queue.Next!.Id);
         Assert.Equal(roundOne[1].Id, queue.OnDeck!.Id);
     }
@@ -452,30 +462,19 @@ public sealed class TatamiQueueServiceTests
     [Trait("Category", "UnitTest")]
     public async Task MoveInQueue_FirstFightUp_IsNoOp()
     {
-        var db = CreateDatabasePath();
-        Guid tid, cid, tatamiId;
-        await using (var ctx = CreateDbContext(db))
-        {
-            await ctx.Database.EnsureCreatedAsync();
-            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
-        }
+        var seeded = await SeedRoundOneOnTatamiAsync();
+        var roundOne = seeded.Fights;
 
-        var roundOne = await RoundOneFightsAsync(db, cid);
-
-        await using (var ctx = CreateDbContext(db))
+        await using (var ctx = CreateDbContext(seeded.Db))
         {
-            var match = CreateMatchService(ctx);
-            foreach (var f in roundOne)
-                await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
-            var result = await match.MoveInQueueAsync(roundOne[0].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
+            var result = await CreateMatchService(ctx).MoveInQueueAsync(roundOne[0].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
-        await using var ctx2 = CreateDbContext(db);
-        var queue = await new TatamiQueueService(ctx2).GetQueueAsync(tid, tatamiId, CancellationToken.None);
+        var queue = await GetQueueAsync(seeded);
 
         // Order unchanged.
-        Assert.Equal(roundOne[0].Id, queue!.Current!.Id);
+        Assert.Equal(roundOne[0].Id, queue.Current!.Id);
         Assert.Equal(roundOne[1].Id, queue.Next!.Id);
     }
 
@@ -483,62 +482,45 @@ public sealed class TatamiQueueServiceTests
     [Trait("Category", "UnitTest")]
     public async Task MoveInQueue_NextFightUp_WhileCurrentNotStarted_PromotesItToCurrent()
     {
-        var db = CreateDatabasePath();
-        Guid tid, cid, tatamiId;
-        await using (var ctx = CreateDbContext(db))
-        {
-            await ctx.Database.EnsureCreatedAsync();
-            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
-        }
+        var seeded = await SeedRoundOneOnTatamiAsync();
+        var roundOne = seeded.Fights;
 
-        var roundOne = await RoundOneFightsAsync(db, cid);
-
-        await using (var ctx = CreateDbContext(db))
+        await using (var ctx = CreateDbContext(seeded.Db))
         {
-            var match = CreateMatchService(ctx);
-            foreach (var f in roundOne)
-                await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
-            var result = await match.MoveInQueueAsync(roundOne[1].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
+            var result = await CreateMatchService(ctx).MoveInQueueAsync(roundOne[1].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
-        await using var ctx2 = CreateDbContext(db);
-        var queue = await new TatamiQueueService(ctx2).GetQueueAsync(tid, tatamiId, CancellationToken.None);
+        var queue = await GetQueueAsync(seeded);
 
-        Assert.Equal(roundOne[1].Id, queue!.Current!.Id);
+        Assert.Equal(roundOne[1].Id, queue.Current!.Id);
         Assert.Equal(roundOne[0].Id, queue.Next!.Id);
         Assert.Equal(roundOne[2].Id, queue.OnDeck!.Id);
     }
 
-    [Fact]
+    [Theory]
     [Trait("Category", "UnitTest")]
-    public async Task MoveInQueue_NextFightUp_WhileCurrentInProgress_KeepsOrder()
+    [InlineData(FightStatus.InProgress)]
+    [InlineData(FightStatus.Paused)]
+    public async Task MoveInQueue_NextFightUp_WhileCurrentStarted_KeepsOrder(FightStatus currentStatus)
     {
-        var db = CreateDatabasePath();
-        Guid tid, cid, tatamiId;
-        await using (var ctx = CreateDbContext(db))
-        {
-            await ctx.Database.EnsureCreatedAsync();
-            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
-        }
+        var seeded = await SeedRoundOneOnTatamiAsync();
+        var roundOne = seeded.Fights;
 
-        var roundOne = await RoundOneFightsAsync(db, cid);
-
-        await using (var ctx = CreateDbContext(db))
+        await using (var ctx = CreateDbContext(seeded.Db))
         {
             var match = CreateMatchService(ctx);
-            foreach (var f in roundOne)
-                await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
             await match.StartAsync(roundOne[0].Id, "T1", CancellationToken.None);
+            if (currentStatus == FightStatus.Paused)
+                await match.PauseAsync(roundOne[0].Id, "T1", CancellationToken.None);
             var result = await match.MoveInQueueAsync(roundOne[1].Id, QueueMoveDirection.Up, "Admin", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
-        await using var ctx2 = CreateDbContext(db);
-        var queue = await new TatamiQueueService(ctx2).GetQueueAsync(tid, tatamiId, CancellationToken.None);
+        var queue = await GetQueueAsync(seeded);
 
-        Assert.Equal(roundOne[0].Id, queue!.Current!.Id);
-        Assert.Equal(FightStatus.InProgress, queue.Current.Status);
+        Assert.Equal(roundOne[0].Id, queue.Current!.Id);
+        Assert.Equal(currentStatus, queue.Current.Status);
         Assert.Equal(roundOne[1].Id, queue.Next!.Id);
         Assert.Equal(roundOne[2].Id, queue.OnDeck!.Id);
     }
@@ -547,20 +529,11 @@ public sealed class TatamiQueueServiceTests
     [Trait("Category", "UnitTest")]
     public async Task MoveInQueue_InProgressFight_ReturnsInvalidState()
     {
-        var db = CreateDatabasePath();
-        Guid tid, cid, tatamiId;
-        await using (var ctx = CreateDbContext(db))
-        {
-            await ctx.Database.EnsureCreatedAsync();
-            (tid, cid, tatamiId) = await SeedAsync(ctx, 8);
-        }
+        var seeded = await SeedRoundOneOnTatamiAsync();
+        var roundOne = seeded.Fights;
 
-        var roundOne = await RoundOneFightsAsync(db, cid);
-
-        await using var ctx3 = CreateDbContext(db);
-        var match = CreateMatchService(ctx3);
-        foreach (var f in roundOne)
-            await match.AssignTatamiAsync(f.Id, tatamiId, "Admin", CancellationToken.None);
+        await using var ctx = CreateDbContext(seeded.Db);
+        var match = CreateMatchService(ctx);
         await match.StartAsync(roundOne[0].Id, "T1", CancellationToken.None);
 
         var result = await match.MoveInQueueAsync(roundOne[0].Id, QueueMoveDirection.Down, "Admin", CancellationToken.None);

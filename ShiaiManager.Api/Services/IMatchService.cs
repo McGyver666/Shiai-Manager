@@ -50,6 +50,7 @@ public interface IMatchService
     /// <summary>
     /// Moves a pending fight one position earlier or later within its tatami's manual queue.
     /// Only pending fights assigned to a tatami can be reordered; a move at the queue boundary is a no-op.
+    /// A not-yet-started current fight is part of the queue, so moving the next fight up swaps the two.
     /// </summary>
     Task<MatchActionResult> MoveInQueueAsync(
         Guid fightId,
