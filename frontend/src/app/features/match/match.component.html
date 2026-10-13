@@ -84,7 +84,7 @@
             </div>
             <div class="fight-card__clock">
               @if (seriesScore(fight); as sides) {
-                <app-running-score [heading]="'series.heading' | t" [sides]="sides" [note]="seriesNote(fight)" />
+                <app-running-score [heading]="'series.heading' | t" [sides]="sides" [note]="seriesLabel(fight, 'ofTotal')" />
               }
               <div class="fight-card__timer">
                 <span class="fight-card__timer-label">{{ (timerIsGoldenScore() ? 'match.goldenScoreTimer' : 'match.matchTimer') | t }}</span>
@@ -263,11 +263,10 @@
                 </div>
                 <div class="fight-context fight-context--upcoming">
                   <span class="fight-context__category">{{ categoryName(fight.categoryId) }}</span>
-                  @if (seriesLabel(fight); as label) {
-                    <span class="fight-context__meta">{{ label.key | t: label.params }}</span>
-                  } @else {
-                    <span class="fight-context__meta">{{ 'draw.fight' | t: { n: fight.fightNumber } }}</span>
-                    <span class="fight-context__meta">{{ 'draw.round' | t: { n: fight.round } }}</span>
+                  <span class="fight-context__meta">{{ 'draw.fight' | t: { n: fight.fightNumber } }}</span>
+                  <span class="fight-context__meta">{{ 'draw.round' | t: { n: fight.round } }}</span>
+                  @if (seriesLabel(fight, 'inSeries'); as label) {
+                    <span class="fight-context__meta">{{ label }}</span>
                   }
                 </div>
               </div>

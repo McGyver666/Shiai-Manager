@@ -359,20 +359,8 @@ public sealed class BracketService : IBracketService
         Guid blueAthleteId,
         DateTimeOffset utcNow) =>
         Enumerable.Range(1, 2)
-            .Select(round => new FightRecord
-            {
-                Id = Guid.NewGuid(),
-                TournamentId = tournamentId,
-                CategoryId = categoryId,
-                BracketType = FightBracketType.Main.ToString(),
-                Round = round,
-                FightNumber = 1,
-                WhiteAthleteId = whiteAthleteId,
-                BlueAthleteId = blueAthleteId,
-                Status = FightStatus.Pending.ToString(),
-                CreatedAtUtc = utcNow,
-                UpdatedAtUtc = utcNow
-            })
+            .Select(round => BestOfThreeSeries.CreateBout(
+                tournamentId, categoryId, round, whiteAthleteId, blueAthleteId, tatamiId: null, utcNow))
             .ToList();
 
     /// <summary>

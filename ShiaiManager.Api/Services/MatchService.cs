@@ -137,10 +137,7 @@ public sealed class MatchService : IMatchService
             tournamentId, user, "FightsAssignedToTatami", "Fight", tournamentId,
             $"Count={changed.Count}", cancellationToken);
 
-        foreach (var fight in changed)
-        {
-            await BroadcastFightUpdatedAsync(fight);
-        }
+        await BroadcastFightsUpdatedAsync(changed, cancellationToken);
 
         return MatchActionResult.Success;
     }
@@ -204,8 +201,7 @@ public sealed class MatchService : IMatchService
             $"Direction={direction}", cancellationToken);
 
         // Broadcast the two affected fights so all clients refresh their queue.
-        await BroadcastFightUpdatedAsync(ordered[index]);
-        await BroadcastFightUpdatedAsync(ordered[targetIndex]);
+        await BroadcastFightsUpdatedAsync([ordered[index], ordered[targetIndex]], cancellationToken);
 
         return MatchActionResult.Success;
     }
@@ -909,22 +905,14 @@ public sealed class MatchService : IMatchService
         if (needed && decider is null)
         {
             var second = bouts.Single(f => f.Round == 2);
-            var now = DateTimeOffset.UtcNow;
-            _dbContext.Fights.Add(new FightRecord
-            {
-                Id = Guid.NewGuid(),
-                TournamentId = second.TournamentId,
-                CategoryId = second.CategoryId,
-                BracketType = MainType,
-                Round = BestOfThreeSeries.DecidingRound,
-                FightNumber = 1,
-                WhiteAthleteId = second.WhiteAthleteId,
-                BlueAthleteId = second.BlueAthleteId,
-                TatamiId = second.TatamiId,
-                Status = Pending,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            });
+            _dbContext.Fights.Add(BestOfThreeSeries.CreateBout(
+                second.TournamentId,
+                second.CategoryId,
+                BestOfThreeSeries.DecidingRound,
+                second.WhiteAthleteId,
+                second.BlueAthleteId,
+                second.TatamiId,
+                DateTimeOffset.UtcNow));
             return null;
         }
 
@@ -1067,28 +1055,22 @@ public sealed class MatchService : IMatchService
         return source.WinnerId == source.WhiteAthleteId ? source.BlueAthleteId : source.WhiteAthleteId;
     }
 
-    private async Task BroadcastFightUpdatedAsync(FightRecord fight)
+    private async Task BroadcastFightsUpdatedAsync(
+        IReadOnlyCollection<FightRecord> fights,
+        CancellationToken cancellationToken)
     {
-        var drawFormat = await _dbContext.Categories
-            .AsNoTracking()
-            .Where(c => c.Id == fight.CategoryId)
-            .Select(c => c.DrawFormat)
-            .FirstOrDefaultAsync();
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
+            _dbContext, fights.Select(f => f.CategoryId), cancellationToken);
 
-        FightSeries? series = null;
-        if (BestOfThreeSeries.IsSeries(drawFormat))
+        foreach (var fight in fights)
         {
-            var bouts = await _dbContext.Fights
-                .AsNoTracking()
-                .Where(f => f.CategoryId == fight.CategoryId)
-                .ToListAsync();
-            series = BestOfThreeSeries.Describe(fight, bouts);
+            await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
+                "FightUpdated",
+                new FightUpdatedMessage(
+                    MapToFight(fight) with { Series = BestOfThreeSeries.DescribeOrNull(fight, seriesBouts) },
+                    DateTimeOffset.UtcNow),
+                CancellationToken.None);
         }
-
-        await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
-            "FightUpdated",
-            new FightUpdatedMessage(MapToFight(fight) with { Series = series }, DateTimeOffset.UtcNow),
-            CancellationToken.None);
     }
 
     /// <summary>Describes the audit entry a fight operation should record after it succeeds.</summary>
@@ -1120,7 +1102,7 @@ public sealed class MatchService : IMatchService
                 fight.TournamentId, user, entry.Action, "Fight", fight.Id, entry.Details, cancellationToken);
         }
 
-        await BroadcastFightUpdatedAsync(fight);
+        await BroadcastFightsUpdatedAsync([fight], cancellationToken);
         return MatchActionResult.Success;
     }
 

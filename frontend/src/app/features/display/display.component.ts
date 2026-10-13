@@ -19,7 +19,7 @@ import { TranslatePipe } from '../../core/translate.pipe';
 import { Athlete, Category, Club, Fight, FightSide, Tatami, TatamiQueue, Tournament } from '../../core/models';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
-import { seriesScoreSides } from '../../core/fight-series';
+import { seriesScoreSides } from '../../shared/fight-series';
 import { I18nService } from '../../core/i18n.service';
 
 interface TatamiDisplay {

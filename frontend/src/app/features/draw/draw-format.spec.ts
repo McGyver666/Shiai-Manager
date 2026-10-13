@@ -32,4 +32,10 @@ describe('draw-format', () => {
     expect(effectiveDrawFormat({ explicit: 'BestOfThree', stored: null, athleteCount: 3, globalFormat: 'RoundRobin' }))
       .toBe('RoundRobin');
   });
+
+  it('keeps a stored Best-of-Three draw even when the athlete count changed', () => {
+    expect(effectiveDrawFormat({ explicit: undefined, stored: 'BestOfThree', athleteCount: 3, globalFormat: 'RoundRobin' }))
+      .toBe('BestOfThree');
+    expect(categoryDrawFormats(3, 'BestOfThree')).toContain('BestOfThree');
+  });
 });

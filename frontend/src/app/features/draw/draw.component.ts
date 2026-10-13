@@ -8,7 +8,7 @@ import { TournamentContextService } from '../../core/tournament-context.service'
 import { I18nService } from '../../core/i18n.service';
 import { extractApiError } from '../../core/http-error';
 import { Athlete, BracketFormat, Category, Club, Fight, RegistrationDetail, RoundRobinStanding } from '../../core/models';
-import { seriesPositionText, seriesScoreSides, TranslatedText } from '../../core/fight-series';
+import { isSeriesFormat, seriesBoutHeading, seriesScoreSides } from '../../shared/fight-series';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 import { categoryDrawFormats, DRAW_FORMAT_LABEL_KEYS, effectiveDrawFormat, GLOBAL_DRAW_FORMATS } from './draw-format';
 
@@ -164,7 +164,7 @@ export class DrawComponent implements OnInit {
   }
 
   protected categoryFormats(categoryId: string): BracketFormat[] {
-    return categoryDrawFormats(this.categoryAthleteCount(categoryId));
+    return categoryDrawFormats(this.categoryAthleteCount(categoryId), this.categoryFormat(categoryId));
   }
 
   private categoryAthleteCount(categoryId: string): number {
@@ -234,7 +234,7 @@ export class DrawComponent implements OnInit {
 
   /** True when the category was drawn as a Kampfserie (Best of Three). */
   protected isCategorySeries(categoryId: string): boolean {
-    return this.categories().find((category) => category.id === categoryId)?.drawFormat === 'BestOfThree';
+    return isSeriesFormat(this.categories().find((category) => category.id === categoryId)?.drawFormat);
   }
 
   protected seriesFights(categoryId: string): Fight[] {
@@ -243,18 +243,10 @@ export class DrawComponent implements OnInit {
 
   protected seriesScore(categoryId: string): RunningScoreSide[] | null {
     const series = this.fightsForCategory(categoryId).find((fight) => fight.series)?.series;
-    if (!series) {
-      return null;
-    }
-
     return seriesScoreSides(series, 'white', this.context.tournament()?.accentSideColor ?? 'Blue', (key) => this.i18n.translate(key));
   }
 
-  protected seriesFightLabel(fight: Fight): TranslatedText {
-    return fight.series
-      ? seriesPositionText(fight.series, 'inSeries')
-      : { key: 'draw.fight', params: { n: fight.fightNumber } };
-  }
+  protected readonly seriesFightLabel = seriesBoutHeading;
 
   protected mainRoundsForCategory(categoryId: string): RoundGroup[] {
     return this.groupRounds(this.fightsForCategory(categoryId), 'Main');

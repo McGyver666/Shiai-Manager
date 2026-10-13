@@ -24,15 +24,18 @@ export function isBestOfThreeAvailable(athleteCount: number): boolean {
   return athleteCount === 2;
 }
 
-/** Formats selectable for a single category. */
-export function categoryDrawFormats(athleteCount: number): BracketFormat[] {
-  return isBestOfThreeAvailable(athleteCount) ? [...GLOBAL_DRAW_FORMATS, 'BestOfThree'] : [...GLOBAL_DRAW_FORMATS];
+/** Formats selectable for a single category; a stored Best-of-Three draw stays selectable as shown. */
+export function categoryDrawFormats(athleteCount: number, current?: BracketFormat): BracketFormat[] {
+  return isBestOfThreeAvailable(athleteCount) || current === 'BestOfThree'
+    ? [...GLOBAL_DRAW_FORMATS, 'BestOfThree']
+    : [...GLOBAL_DRAW_FORMATS];
 }
 
 /**
  * Format shown and used for a category: an explicit choice (per category or applied globally) wins,
  * then the stored draw format, then Best of Three for two athletes, otherwise the global format.
- * A Best-of-Three choice that no longer fits the athlete count falls back to the global format.
+ * An explicit Best-of-Three choice that no longer fits the athlete count is ignored; a stored format is
+ * always kept.
  */
 export function effectiveDrawFormat(options: {
   explicit: BracketFormat | undefined;
@@ -40,10 +43,10 @@ export function effectiveDrawFormat(options: {
   athleteCount: number;
   globalFormat: BracketFormat;
 }): BracketFormat {
-  const preferred = options.explicit
-    ?? options.stored
-    ?? (isBestOfThreeAvailable(options.athleteCount) ? 'BestOfThree' : options.globalFormat);
-  return preferred === 'BestOfThree' && !isBestOfThreeAvailable(options.athleteCount)
-    ? options.globalFormat
-    : preferred;
+  const bestOfThreeFits = isBestOfThreeAvailable(options.athleteCount);
+  if (options.explicit && (options.explicit !== 'BestOfThree' || bestOfThreeFits)) {
+    return options.explicit;
+  }
+
+  return options.stored ?? (bestOfThreeFits ? 'BestOfThree' : options.globalFormat);
 }

@@ -36,9 +36,9 @@ public sealed class SqliteFightsStore : IFightsStore
             .ThenBy(f => f.FightNumber)
             .ToListAsync(cancellationToken);
 
-        var isSeries = await IsSeriesCategoryAsync(categoryId, cancellationToken);
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, [categoryId], cancellationToken);
         return records
-            .Select(r => MapToModel(r) with { Series = isSeries ? BestOfThreeSeries.Describe(r, records) : null })
+            .Select(r => MapToModel(r) with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) })
             .ToArray();
     }
 
@@ -50,21 +50,9 @@ public sealed class SqliteFightsStore : IFightsStore
             .FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
         if (record is null) return null;
 
-        if (!await IsSeriesCategoryAsync(record.CategoryId, cancellationToken)) return MapToModel(record);
-
-        var bouts = await _dbContext.Fights
-            .AsNoTracking()
-            .Where(f => f.CategoryId == record.CategoryId)
-            .ToListAsync(cancellationToken);
-        return MapToModel(record) with { Series = BestOfThreeSeries.Describe(record, bouts) };
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, [record.CategoryId], cancellationToken);
+        return MapToModel(record) with { Series = BestOfThreeSeries.DescribeOrNull(record, seriesBouts) };
     }
-
-    private async Task<bool> IsSeriesCategoryAsync(Guid categoryId, CancellationToken cancellationToken) =>
-        BestOfThreeSeries.IsSeries(await _dbContext.Categories
-            .AsNoTracking()
-            .Where(c => c.Id == categoryId)
-            .Select(c => c.DrawFormat)
-            .FirstOrDefaultAsync(cancellationToken));
 
     private static Fight MapToModel(FightRecord r) =>
         new(r.Id,

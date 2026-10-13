@@ -79,9 +79,9 @@ continue to use the natural age group.
 The draw format `BestOfThree` is accepted only for exactly two athletes in the individual competition
 mode; otherwise the draw returns a validation problem with `messageKey`
 `errors.draw.bestOfThreeRequiresTwoAthletes` or `errors.draw.bestOfThreeRequiresIndividualMode`. It creates
-bouts 1 and 2 (rounds 1 and 2); confirming bout 2 at a 1:1 series score creates the deciding bout
+fights 1 and 2 (rounds 1 and 2); confirming fight 2 at a 1:1 series score creates the deciding fight
 (round 3) on the same tatami, and a result correction adds or removes it (removing a started deciding
-bout requires confirmation and writes a `DecidingFightRemoved` audit entry). An unlocked Best-of-Three
+fight requires confirmation and writes a `DecidingFightRemoved` audit entry). An unlocked Best-of-Three
 category whose athlete count changes away from two loses its draw. Fights of a series carry
 `series` (`boutNumber`, `isDecidingFight`, `whiteWins`, `blueWins`); ranking entries carry
 `seriesWins`/`seriesLosses`.

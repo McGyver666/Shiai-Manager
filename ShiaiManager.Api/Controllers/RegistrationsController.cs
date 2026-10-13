@@ -291,7 +291,7 @@ public sealed class RegistrationsController : ControllerBase
 
         if (registration.CategoryId.HasValue)
         {
-            await RefreshCategoryDrawIfPossibleAsync(
+            await _bracketService.RefreshDrawAsync(
                 tournamentId,
                 registration.CategoryId.Value,
                 cancellationToken);
@@ -525,7 +525,7 @@ public sealed class RegistrationsController : ControllerBase
 
         if (oldCategory is not null && nextCategoryId is null)
         {
-            await RefreshCategoryDrawIfPossibleAsync(tournamentId, oldCategory.Id, cancellationToken);
+            await _bracketService.RefreshDrawAsync(tournamentId, oldCategory.Id, cancellationToken);
         }
 
         return Ok(updated);
@@ -545,15 +545,9 @@ public sealed class RegistrationsController : ControllerBase
     {
         foreach (var categoryId in categoryIds.Distinct())
         {
-            await RefreshCategoryDrawIfPossibleAsync(tournamentId, categoryId, cancellationToken);
+            await _bracketService.RefreshDrawAsync(tournamentId, categoryId, cancellationToken);
         }
     }
-
-    private Task RefreshCategoryDrawIfPossibleAsync(
-        Guid tournamentId,
-        Guid categoryId,
-        CancellationToken cancellationToken) =>
-        _bracketService.RefreshDrawAsync(tournamentId, categoryId, cancellationToken);
 
     private async Task<bool> TournamentExistsAsync(Guid tournamentId, CancellationToken cancellationToken)
     {

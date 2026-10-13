@@ -299,7 +299,7 @@
   margin-bottom: 1rem;
 }
 
-/* ── Kampfserie (Best of Three): bouts stacked under the Serienstand ──────── */
+/* ── Kampfserie (Best of Three): Serienstand above the bouts side by side ── */
 .series {
   display: flex;
   flex-direction: column;

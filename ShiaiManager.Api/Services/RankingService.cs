@@ -170,8 +170,7 @@ public sealed class RankingService : IRankingService
             if (BestOfThreeSeries.WinnerOf(mainFights) is not { } seriesWinner)
                 return entries;
 
-            var reference = mainFights[0];
-            var seriesLoser = reference.WhiteAthleteId == seriesWinner ? reference.BlueAthleteId : reference.WhiteAthleteId;
+            var seriesLoser = BestOfThreeSeries.LoserOf(mainFights);
             var winnerWins = BestOfThreeSeries.WinsOf(mainFights, seriesWinner);
             var loserWins = BestOfThreeSeries.WinsOf(mainFights, seriesLoser);
             entries.Add(new RankingEntry(1, seriesWinner, AthleteName(seriesWinner), ClubName(seriesWinner), winnerWins, loserWins));

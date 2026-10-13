@@ -21,7 +21,7 @@ import { CategoryFightsUpdatedEvent, TournamentHubService } from '../../core/tou
 import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
-import { seriesPositionText, seriesScoreSides, TranslatedText } from '../../core/fight-series';
+import { seriesPositionLabel, seriesScoreSides } from '../../shared/fight-series';
 import {
   AdjustScoreRequest,
   Athlete,
@@ -920,17 +920,9 @@ export class MatchComponent implements OnInit, OnDestroy {
       : null;
   }
 
-  protected seriesNote(fight: Fight): string | null {
-    if (!fight.series) {
-      return null;
-    }
-
-    const text = seriesPositionText(fight.series, 'ofTotal');
-    return this.i18n.translate(text.key, text.params);
-  }
-
-  protected seriesLabel(fight: Fight): TranslatedText | null {
-    return fight.series ? seriesPositionText(fight.series, 'inSeries') : null;
+  /** "Kampf 2 von 3" (score note) or "Kampf 2 der Serie" (upcoming list); null outside a Kampfserie. */
+  protected seriesLabel(fight: Fight, style: 'ofTotal' | 'inSeries'): string | null {
+    return seriesPositionLabel(fight.series, style, (key, params) => this.i18n.translate(key, params));
   }
 
   protected canRecordScore(fight: Fight): boolean {

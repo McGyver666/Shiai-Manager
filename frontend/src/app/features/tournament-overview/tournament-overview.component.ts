@@ -10,7 +10,7 @@ import { TournamentHubService } from '../../core/tournament-hub.service';
 import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
-import { seriesPositionText, seriesScoreSides } from '../../core/fight-series';
+import { seriesPositionLabel, seriesScoreSides } from '../../shared/fight-series';
 import { canAutoRotateHero, nextHeroIndex } from './overview-hero-state';
 
 interface TatamiView {
@@ -331,12 +331,7 @@ export class TournamentOverviewComponent implements OnDestroy {
 
   /** "Kampf n der Serie" / "Entscheidungskampf"; null outside a Kampfserie. */
   protected seriesLabel(fight: Fight): string | null {
-    if (!fight.series) {
-      return null;
-    }
-
-    const text = seriesPositionText(fight.series, 'inSeries');
-    return this.i18n.translate(text.key, text.params);
+    return seriesPositionLabel(fight.series, 'inSeries', (key, params) => this.i18n.translate(key, params));
   }
 
   protected fighterSideLabel(): string {

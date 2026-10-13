@@ -17,7 +17,7 @@ import { SideThemeService } from '../../core/side-theme.service';
 import { CategoryFightsUpdatedEvent, TournamentHubService } from '../../core/tournament-hub.service';
 import { TranslatePipe } from '../../core/translate.pipe';
 import { Category, Fight, PublicAthlete, PublicClub, RoundRobinStanding, Tournament } from '../../core/models';
-import { seriesPositionText, seriesScoreSides, TranslatedText } from '../../core/fight-series';
+import { isSeriesFormat, seriesBoutHeading, seriesScoreSides } from '../../shared/fight-series';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 
 interface RoundGroup {
@@ -349,7 +349,7 @@ export class MatchListsComponent implements OnInit, OnDestroy {
   }
 
   protected isCategorySeries(category: Category): boolean {
-    return category.drawFormat === 'BestOfThree';
+    return isSeriesFormat(category.drawFormat);
   }
 
   protected seriesFights(categoryId: string): Fight[] {
@@ -359,16 +359,10 @@ export class MatchListsComponent implements OnInit, OnDestroy {
   /** Serienstand in list layout (White first, as in every slot pair); null before the series data is loaded. */
   protected seriesScore(categoryId: string): RunningScoreSide[] | null {
     const series = this.fightsForCategory(categoryId).find((fight) => fight.series)?.series;
-    return series
-      ? seriesScoreSides(series, 'white', this.sideTheme.accentSideColor(this.tournament()), (key) => this.i18n.translate(key))
-      : null;
+    return seriesScoreSides(series, 'white', this.sideTheme.accentSideColor(this.tournament()), (key) => this.i18n.translate(key));
   }
 
-  protected seriesFightLabel(fight: Fight): TranslatedText {
-    return fight.series
-      ? seriesPositionText(fight.series, 'inSeries')
-      : { key: 'draw.fight', params: { n: fight.fightNumber } };
-  }
+  protected readonly seriesFightLabel = seriesBoutHeading;
 
   protected isCategoryRoundRobinWithKnockout(category: Category): boolean {
     return category.drawFormat === 'RoundRobinWithKnockout';

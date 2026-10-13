@@ -52,7 +52,7 @@ Initial admin credentials (save these now):
 - Athlete belt grades are optional; blank CSV grades remain blank when exported and re-imported.
 - Weigh-in registrations accept optional start age group, `grade` corrections (1-14) and `licenseId` updates, saved atomically with the registration. Start-age changes are audited and blocked after a category is drawn or locked.
 - Individual tournament draws, brackets, tatami assignment, live fight control and server-authoritative timing.
-- Best of Three draw format for categories with exactly two athletes (preselected on the draw page): bouts 1 and 2 are drawn up front, a deciding bout is added at 1:1 on the same tatami; the series score is shown on match control, tatami displays and the tournament overview ([ADR-0012](docs/adr/0012-best-of-three-draw-format.md)).
+- Best of Three draw format for categories with exactly two athletes (preselected on the draw page): fights 1 and 2 are drawn up front, a deciding fight is added at 1:1 on the same tatami; the series score is shown on match control, tatami displays and the tournament overview ([ADR-0012](docs/adr/0012-best-of-three-draw-format.md)).
 - NWJV team-matchday workflows for senior and U16 profiles, including weigh-ins, lineups and encounters.
 - Athlete imports from DM4/DMF files, public displays, match lists, rankings, medal tables and club scoring.
 - Local authentication with role-based access, HttpOnly sessions, audit logging and guest sharing.

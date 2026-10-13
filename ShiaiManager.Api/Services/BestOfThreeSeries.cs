@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using ShiaiManager.Api.Data;
 using ShiaiManager.Api.Models;
 
@@ -43,10 +44,71 @@ internal static class BestOfThreeSeries
         return null;
     }
 
+    /// <summary>Returns the athlete who lost the series, or null while the series is open.</summary>
+    public static Guid? LoserOf(IReadOnlyCollection<FightRecord> bouts)
+    {
+        if (WinnerOf(bouts) is not { } winner) return null;
+        var reference = bouts.First();
+        return reference.WhiteAthleteId == winner ? reference.BlueAthleteId : reference.WhiteAthleteId;
+    }
+
     /// <summary>Describes the position of <paramref name="bout"/> and the current Serienstand.</summary>
     public static FightSeries Describe(FightRecord bout, IReadOnlyCollection<FightRecord> bouts) =>
         new(bout.Round,
             bout.Round == DecidingRound,
             WinsOf(bouts, bout.WhiteAthleteId),
             WinsOf(bouts, bout.BlueAthleteId));
+
+    /// <summary>Describes <paramref name="bout"/> when its category is a Kampfserie, otherwise null.</summary>
+    public static FightSeries? DescribeOrNull(FightRecord bout, IReadOnlyDictionary<Guid, List<FightRecord>> boutsByCategory) =>
+        boutsByCategory.TryGetValue(bout.CategoryId, out var bouts) ? Describe(bout, bouts) : null;
+
+    /// <summary>
+    /// Loads all bouts of the Best-of-Three categories among <paramref name="categoryIds"/>, keyed by category;
+    /// categories with another draw format are absent.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<Guid, List<FightRecord>>> LoadBoutsAsync(
+        AppDbContext dbContext,
+        IEnumerable<Guid> categoryIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = categoryIds.Distinct().ToList();
+        var seriesCategoryIds = await dbContext.Categories
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.Id) && c.DrawFormat == FormatName)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+        if (seriesCategoryIds.Count == 0) return new Dictionary<Guid, List<FightRecord>>();
+
+        var bouts = await dbContext.Fights
+            .AsNoTracking()
+            .Where(f => seriesCategoryIds.Contains(f.CategoryId))
+            .ToListAsync(cancellationToken);
+        return bouts.GroupBy(f => f.CategoryId).ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    /// <summary>Creates a pending bout of a Kampfserie between the series' White and Blue athlete.</summary>
+    public static FightRecord CreateBout(
+        Guid tournamentId,
+        Guid categoryId,
+        int round,
+        Guid? whiteAthleteId,
+        Guid? blueAthleteId,
+        Guid? tatamiId,
+        DateTimeOffset utcNow) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TournamentId = tournamentId,
+            CategoryId = categoryId,
+            BracketType = FightBracketType.Main.ToString(),
+            Round = round,
+            FightNumber = 1,
+            WhiteAthleteId = whiteAthleteId,
+            BlueAthleteId = blueAthleteId,
+            TatamiId = tatamiId,
+            Status = FightStatus.Pending.ToString(),
+            CreatedAtUtc = utcNow,
+            UpdatedAtUtc = utcNow
+        };
 }

@@ -52,7 +52,7 @@ Initial admin credentials (save these now):
 - Guertelgrade bei Athleten sind optional; leere CSV-Grade bleiben beim Export und Re-Import leer.
 - Waagenmeldungen akzeptieren eine optionale Startaltersklasse sowie `grade`-Korrekturen (1-14) und `licenseId`-Aenderungen, die atomar mit der Meldung gespeichert werden. Startaltersklassen-Aenderungen werden auditiert und nach Auslosung oder Sperrung abgelehnt.
 - Einzelturnier-Auslosungen, Brackets, Tatami-Zuordnung, Kampfbetrieb und serverautorisierte Zeitmessung.
-- Auslosungsformat Best of Three fuer Gewichtsklassen mit genau zwei Athleten (auf der Auslosungsseite vorausgewaehlt): Kampf 1 und 2 werden vorab ausgelost, bei 1:1 entsteht der Entscheidungskampf auf derselben Matte; der Serienstand erscheint in Kampfsteuerung, Tatami-Anzeigen und Turnieruebersicht ([ADR-0012](docs/adr/0012-best-of-three-draw-format.md)).
+- Auslosungsformat Best of Three fuer Gewichtsklassen mit genau zwei Athleten (auf der Auslosungsseite vorausgewaehlt): Kampf 1 und 2 werden vorab ausgelost, bei 1:1 entsteht der Entscheidungskampf auf demselben Tatami; der Serienstand erscheint in Kampfsteuerung, Tatami-Anzeigen und Turnieruebersicht ([ADR-0012](docs/adr/0012-best-of-three-draw-format.md)).
 - NWJV-Mannschafts-Kampftage fuer Senioren- und U16-Profile mit Tageswaage, Aufstellungen und Begegnungen.
 - DM4/DMF-Athletenimport, oeffentliche Anzeigen, Wettkampflisten, Ranglisten, Medaillenspiegel und Vereinswertung.
 - Lokale Authentifizierung mit Rollen, HttpOnly-Sitzungen, Audit-Logging und Gastfreigaben.
