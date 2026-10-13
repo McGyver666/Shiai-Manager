@@ -18,6 +18,7 @@
 	--display-shido: #ffc72e;
 	--display-stopped: #ff4b3e;
 	--display-hansoku: #e3261a;
+	--display-clock-size: clamp(4.5rem, 10.5vw, 11rem);
 	--c-text: var(--display-text);
 	--c-muted: var(--display-text-muted);
 	--c-border: var(--display-border);
@@ -118,7 +119,7 @@
 
 .fight-timer--xl {
 	font-family: var(--ff-mono);
-	font-size: clamp(4.5rem, 10.5vw, 11rem);
+	font-size: var(--display-clock-size);
 	line-height: 1;
 	font-weight: 900;
 	letter-spacing: 0.08em;
@@ -150,14 +151,15 @@
 	animation: none;
 }
 
+/* Sized in the clock font so the fixed width (fits "20.0 / 20") matches the placeholder and never shifts neighbours. */
 .hold-timer,
 .hold-timer-spacer {
-	--hold-value-size: clamp(2.4rem, 5.5vw, 4.5rem);
 	justify-self: center;
 	align-self: center;
 	box-sizing: border-box;
-	/* Fixed width (fits "20.0 / 20") so showing the hold never shifts its neighbours. */
-	width: calc(var(--hold-value-size) * 4.4);
+	font-family: var(--ff-mono);
+	font-size: var(--display-clock-size);
+	width: calc(5.4ch + 0.9em + 4px);
 	min-height: clamp(5.5rem, 10vw, 8rem);
 	display: flex;
 	flex-direction: column;
@@ -170,7 +172,7 @@
 
 .hold-timer {
 	text-align: center;
-	padding: .35rem 1rem;
+	padding: .35rem .25em;
 	border-radius: var(--radius);
 	border: 2px solid var(--side-accent-soft);
 	background: color-mix(in srgb, var(--display-bg) 72%, transparent);
@@ -188,6 +190,7 @@
 }
 
 .hold-timer-label {
+	font-family: var(--ff-ui);
 	font-size: clamp(1.15rem, 2vw, 1.6rem);
 	text-transform: uppercase;
 	letter-spacing: .12em;
@@ -198,13 +201,12 @@
 	display: flex;
 	align-items: baseline;
 	justify-content: center;
-	gap: .55rem;
+	gap: .15em;
 	line-height: 1;
 }
 
 .hold-timer-value {
-	font-family: var(--ff-mono);
-	font-size: var(--hold-value-size);
+	font-size: 1em;
 	font-weight: 900;
 	font-variant-numeric: tabular-nums;
 	/* Reserve the widest label ("20.0") so the box doesn't jitter while counting. */
@@ -221,8 +223,7 @@
 }
 
 .hold-timer-target {
-	font-family: var(--ff-mono);
-	font-size: calc(var(--hold-value-size) * 0.38);
+	font-size: .3em;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	opacity: .9;
@@ -474,8 +475,8 @@
 		grid-template-columns: 1fr;
 	}
 
-	.fight-timer--xl {
-		font-size: clamp(2.2rem, 13vw, 4.6rem);
+	.display-page--tatami {
+		--display-clock-size: clamp(2.2rem, 13vw, 4.6rem);
 	}
 }
 
