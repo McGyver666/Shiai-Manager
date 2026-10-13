@@ -118,22 +118,22 @@ public sealed class MatchClockEvaluator : BackgroundService
         }
 
         var category = fight.Category;
-        if (category is null || fight.StartedAtUtc is null)
+        if (FightTiming.Resolve(fight, category) is not { } timing || fight.StartedAtUtc is null)
         {
             return;
         }
 
         var elapsedSeconds = (now - fight.StartedAtUtc.Value).TotalSeconds;
-        var regularDuration = category.MatchDurationSeconds;
+        var regularDuration = timing.MatchDurationSeconds;
         if (elapsedSeconds < regularDuration)
         {
             return;
         }
 
         var timeLimitSeconds = regularDuration;
-        if (category.GoldenScoreEnabled && GoldenScoreRules.IsTied(fight))
+        if (timing.GoldenScoreEnabled && GoldenScoreRules.IsTied(fight))
         {
-            timeLimitSeconds += category.GoldenScoreDurationSeconds;
+            timeLimitSeconds += timing.GoldenScoreDurationSeconds;
         }
 
         if (elapsedSeconds < timeLimitSeconds)

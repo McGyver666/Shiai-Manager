@@ -140,6 +140,7 @@ builder.Services.AddScoped<IFightsStore, SqliteFightsStore>();
 builder.Services.AddScoped<IBracketService, BracketService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IMatchService, MatchService>();
+builder.Services.AddScoped<IFreeFightService, FreeFightService>();
 builder.Services.AddScoped<ITatamiQueueService, TatamiQueueService>();
 builder.Services.AddScoped<IRankingService, RankingService>();
 builder.Services.AddScoped<IResultsCsvExportService, ResultsCsvExportService>();

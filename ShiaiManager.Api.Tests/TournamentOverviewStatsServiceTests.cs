@@ -122,6 +122,50 @@ public sealed class TournamentOverviewStatsServiceTests
         Assert.Equal(0, result.IpponCount);
     }
 
+    [Fact]
+    public async Task GetAsync_IgnoresFreikaempfe()
+    {
+        await using var context = CreateDbContext();
+        await context.Database.EnsureCreatedAsync();
+        var tournamentId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var whiteId = Guid.NewGuid();
+        var blueId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        context.Tournaments.Add(new TournamentRecord
+        {
+            Id = tournamentId, Name = "Freikampf-Turnier", Date = new DateOnly(2026, 9, 7),
+            Venue = "Sporthalle", Organizer = "Verein", AccentSideColor = "Blue",
+            CreatedAtUtc = now, UpdatedAtUtc = now,
+        });
+        context.Categories.Add(new CategoryRecord
+        {
+            Id = categoryId, TournamentId = tournamentId, Name = "U18 -73 kg", AgeGroup = "U18", Gender = "Male",
+            CreatedAtUtc = now, UpdatedAtUtc = now,
+        });
+
+        var completedFree = Fight(tournamentId, categoryId, whiteId, blueId, FightStatus.Completed, false, now.AddMinutes(-10), now, 1, 0);
+        var pendingFree = Fight(tournamentId, categoryId, whiteId, blueId, FightStatus.Pending, false, null, null, 0, 0);
+        foreach (var free in new[] { completedFree, pendingFree })
+        {
+            free.Kind = nameof(FightKind.Free);
+            free.CategoryId = null;
+        }
+
+        context.Fights.AddRange(
+            Fight(tournamentId, categoryId, whiteId, blueId, FightStatus.Completed, false, now.AddMinutes(-2), now, 0, 1),
+            completedFree,
+            pendingFree);
+        await context.SaveChangesAsync();
+
+        var result = await new TournamentOverviewStatsService(context).GetAsync(tournamentId, CancellationToken.None);
+
+        Assert.Equal(1, result.FightsCompleted);
+        Assert.Equal(1, result.FightsTotal);
+        Assert.Equal(120d, result.AverageFightDurationSeconds);
+        Assert.Equal(1, result.IpponCount);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ShiaiOverviewStatsTests", Guid.NewGuid().ToString("N"));

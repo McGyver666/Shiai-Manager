@@ -118,6 +118,15 @@ Use these terms as-is (German primary) in issues, tests, and code names; don't d
 - **Tatami** — a mat/fight area. Fights are queued and assigned per tatami. A started fight stays on
   its tatami; only not-yet-started fights can be moved to another tatami.
 - **Kampf** (Fight) — a single bout. **Freilos** = a bye (does not count as a fight).
+- **Freikampf** (Free fight) — a spontaneous Kampf added at the Mattentisch outside the official
+  schedule. Each side is a free-text name (default "Weiß" and the accent colour, "Blau" or "Rot") or
+  an athlete of the Turnier. It stays on the tatami it was created on. It never counts towards
+  Vereinswertung, rankings, medals or brackets and does not affect any category, but it does count
+  as the athletes' last fight for rest-time warnings. The operator may end it in Hikiwake at any
+  time; once started it cannot be cancelled, only won (a withdrawal is a win for the opponent).
+  See [ADR-0013](docs/adr/0013-freikampf-fight-kind-without-category.md).
+  _Avoid_: Randori, Freundschaftskampf, Einlagekampf, Ad-hoc-Kampf, anonymer Kampf; not to be
+  confused with Freilos.
 - **Osae-komi** — hold-down; server-authoritative timing with Sono-mama/Yoshi pause and resume that freezes both hold and fight clocks.
 - **Hansoku-make** — disqualification from the bout. Currently derived from the 3rd **Shido** (penalty):
   the opponent automatically receives an Ippon; fight status and osae-komi are not changed and the

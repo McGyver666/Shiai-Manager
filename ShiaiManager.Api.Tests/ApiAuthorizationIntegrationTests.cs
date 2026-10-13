@@ -270,6 +270,28 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
     }
 
     [Fact]
+    public async Task OperatorRole_CanReachLiveOperationEndpoints()
+    {
+        using var client = _factory.CreateClient();
+        await BootstrapAdminAndCreateUserAsync(client, "operator-live", "Operator");
+
+        var token = await LoginAndGetTokenAsync(client, "operator-live", "Operator!1234");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        foreach (var request in LiveFightOperationRequests(Guid.NewGuid(), Guid.NewGuid()))
+        {
+            using var message = new HttpRequestMessage(request.Method, request.Uri) { Content = request.Content };
+            using var response = await client.SendAsync(message);
+
+            // A ProblemDetails 404 comes from the action; an unmatched route would not produce one.
+            Assert.True(
+                response.StatusCode is HttpStatusCode.NotFound
+                    && response.Content.Headers.ContentType?.MediaType == "application/problem+json",
+                $"Operator request {request.Method} {request.Uri} did not reach the action: {response.StatusCode}.");
+        }
+    }
+
+    [Fact]
     public async Task DisplayRole_CannotOperateLiveFight()
     {
         using var client = _factory.CreateClient();
@@ -306,7 +328,7 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
     }
 
     /// <summary>Every write endpoint the match control (/match) calls under the LiveFightOperation policy.</summary>
-    private static (HttpMethod Method, string Uri, HttpContent? Content)[] LiveFightOperationRequests(Guid tournamentId, Guid fightId)
+    internal static (HttpMethod Method, string Uri, HttpContent? Content)[] LiveFightOperationRequests(Guid tournamentId, Guid fightId)
     {
         var fight = $"/api/tournaments/{tournamentId}/fights/{fightId}";
         return
@@ -321,8 +343,14 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
             (HttpMethod.Post, $"{fight}/osae-komi/pause", null),
             (HttpMethod.Post, $"{fight}/osae-komi/resume", null),
             (HttpMethod.Post, $"{fight}/result", JsonContent.Create(new { WinnerId = Guid.NewGuid() })),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/tatamis/{Guid.NewGuid()}/free-fights", JsonContent.Create(FreeFightBody)),
+            (HttpMethod.Get, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", null),
+            (HttpMethod.Put, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", JsonContent.Create(FreeFightBody)),
+            (HttpMethod.Delete, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", null),
         ];
     }
+
+    private static readonly object FreeFightBody = new { White = new { Name = "Weiß" }, Blue = new { Name = "Blau" } };
 
     [Theory]
     [InlineData("Admin", "admin-regression", "Admin!123456")]

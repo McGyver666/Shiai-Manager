@@ -10,7 +10,7 @@ import { I18nService } from '../../core/i18n.service';
 import { SideThemeService } from '../../core/side-theme.service';
 import { TimeService } from '../../core/time.service';
 import { TournamentContextService } from '../../core/tournament-context.service';
-import { TournamentHubService } from '../../core/tournament-hub.service';
+import { TatamiQueueChangedEvent, TournamentHubService } from '../../core/tournament-hub.service';
 import { MatchComponent } from './match.component';
 
 const ENABLED_SCORE_BUTTON = '.btn--positive:not(:disabled)';
@@ -21,6 +21,7 @@ describe('MatchComponent', () => {
     tournamentId: string;
     categoryId: string;
   }>;
+  let tatamiQueueChanges: Subject<TatamiQueueChangedEvent>;
   let getTatamiQueueSpy: Mock;
   let getAthletesSpy: Mock;
   let startFightSpy: Mock;
@@ -135,6 +136,7 @@ describe('MatchComponent', () => {
       tournamentId: string;
       categoryId: string;
     }>();
+    tatamiQueueChanges = new Subject<TatamiQueueChangedEvent>();
 
     const tournament = createTournament();
     tournamentSignal = signal(tournament);
@@ -207,6 +209,7 @@ describe('MatchComponent', () => {
             connect: () => Promise.resolve(),
             fightUpdated$: fightUpdates.asObservable(),
             categoryFightsUpdated$: categoryFightsUpdates.asObservable(),
+            tatamiQueueChanged$: tatamiQueueChanges.asObservable(),
             serverTimeSync$: new Subject<string>().asObservable(),
             reconnected$: new Subject<void>().asObservable(),
           },
@@ -936,6 +939,203 @@ describe('MatchComponent', () => {
       component.restartTimer(pendingFight({ id: 'fight-next' }));
       expect(component.holdTimerLabel()).toBe('--s');
 
+      fixture.destroy();
+    });
+  });
+
+  describe('Freikampf (#96)', () => {
+    const restingAthlete = {
+      id: 'athlete-resting',
+      tournamentId: 'tournament-1',
+      clubId: 'club-1',
+      firstName: 'Rita',
+      lastName: 'Ruhe',
+      lastFightDurationSeconds: 120,
+      lastFightEndedAtUtc: new Date(Date.now() - 30_000).toISOString(),
+    } as Athlete;
+
+    function freeFight(overrides: Partial<Fight> = {}): Fight {
+      return pendingFight({
+        id: 'free-1',
+        categoryId: null,
+        round: 0,
+        fightNumber: 0,
+        whiteAthleteId: null,
+        blueAthleteId: null,
+        freeFight: {
+          whiteName: 'Gast 1',
+          blueName: 'Gast 2',
+          matchDurationSeconds: 120,
+          goldenScoreEnabled: false,
+          goldenScoreDurationSeconds: 180,
+          winnerSide: null,
+        },
+        ...overrides,
+      });
+    }
+
+    function setup(queue: TatamiQueue) {
+      getTatamiQueueSpy.mockReturnValue(of(queue));
+      const fixture = TestBed.createComponent(MatchComponent);
+      fixture.detectChanges();
+      return { fixture, element: fixture.nativeElement as HTMLElement };
+    }
+
+    function click(fixture: { detectChanges: () => void }, element: HTMLElement, selector: string): void {
+      const target = element.querySelector(selector) as HTMLButtonElement | null;
+      expect(target, selector).not.toBeNull();
+      target!.click();
+      fixture.detectChanges();
+    }
+
+    it('shows free-text names, the Freikampf label and its own fight time', () => {
+      const { fixture, element } = setup(queueWith(freeFight()));
+
+      expect(element.querySelector('.athlete-card--white .athlete-card__name')?.textContent).toContain('Gast 1');
+      expect(element.querySelector('.athlete-card--blue .athlete-card__name')?.textContent).toContain('Gast 2');
+      expect(element.querySelector('.fight-context--current')?.textContent).toContain('freeFight.label');
+      expect(element.querySelector('.fight-context--current .fight-context__meta')).toBeNull();
+      expect(element.querySelector('.athlete-card--winner')).toBeNull();
+      expect((fixture.componentInstance as any).timerSeconds()).toBe(120);
+      fixture.destroy();
+    });
+
+    it('confirms a side win and a Hiki-wake in an individual tournament', () => {
+      const { fixture, element } = setup(queueWith(freeFight({ status: 'InProgress', startedAtUtc: new Date().toISOString() })));
+
+      click(fixture, element, '.confirm-row .btn--blue');
+      click(fixture, element, '.modal-card .btn--primary');
+      click(fixture, element, '.confirm-row .btn--draw');
+      click(fixture, element, '.modal-card .btn--primary');
+
+      expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'free-1', { winnerId: null, winnerSide: 'Blue' }, expect.any(String));
+      expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'free-1', { winnerId: null, winnerSide: null }, expect.any(String));
+      fixture.destroy();
+    });
+
+    it('keeps the Hiki-wake button hidden for regular fights of an individual tournament', () => {
+      const { fixture, element } = setup(queueWith(createFight({ status: 'InProgress' })));
+
+      expect(element.querySelector('.confirm-row .btn--draw')).toBeNull();
+      fixture.destroy();
+    });
+
+    it('creates a Freikampf with the default sides, times and placement', async () => {
+      apiMock.createFreeFight = vi.fn().mockReturnValue(of(freeFight()));
+      const { fixture, element } = setup(queueWith(pendingFight()));
+
+      click(fixture, element, '.upcoming-list__add');
+      // ngModel writes its initial value in a microtask; the running clocks keep whenStable() pending.
+      await Promise.resolve();
+      const placeNext = element.querySelector('input[name="freeFightPlaceNext"]') as HTMLInputElement;
+      placeNext.click();
+      fixture.detectChanges();
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+
+      expect(apiMock.createFreeFight).toHaveBeenCalledWith('tournament-1', 'tatami-1', {
+        white: { athleteId: null, name: 'match.whiteSide' },
+        blue: { athleteId: null, name: 'match.blueSide' },
+        matchDurationSeconds: 240,
+        goldenScoreEnabled: false,
+        goldenScoreDurationSeconds: 180,
+        placeNext: true,
+      });
+      expect(element.querySelector('.free-fight-dialog')).toBeNull();
+      fixture.destroy();
+    });
+
+    it('sends a selected athlete instead of a name and warns about insufficient rest', () => {
+      (apiMock.getAthletes as Mock).mockReturnValue(of([restingAthlete]));
+      apiMock.createFreeFight = vi.fn().mockReturnValue(of(freeFight()));
+      const { fixture, element } = setup(queueWith(pendingFight()));
+
+      click(fixture, element, '.upcoming-list__add');
+      const whiteSelect = element.querySelector('select[data-side="white"]') as HTMLSelectElement;
+      whiteSelect.value = 'athlete-resting';
+      whiteSelect.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(element.querySelector('input[data-side="white"]')).toBeNull();
+      expect(element.querySelector('.free-fight-dialog__warning')?.textContent).toContain('freeFight.restWarning');
+
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+
+      expect(apiMock.createFreeFight).toHaveBeenCalledWith('tournament-1', 'tatami-1', expect.objectContaining({
+        white: { athleteId: 'athlete-resting', name: null },
+      }));
+      fixture.destroy();
+    });
+
+    it('shows the localized API error and keeps the dialog open', () => {
+      apiMock.createFreeFight = vi.fn().mockReturnValue(throwError(() => new Error('offline')));
+      const { fixture, element } = setup(queueWith(pendingFight()));
+
+      click(fixture, element, '.upcoming-list__add');
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+
+      expect(element.querySelector('.free-fight-dialog__error')?.textContent).toContain('freeFight.saveFailed');
+      expect(element.querySelector('.free-fight-dialog')).not.toBeNull();
+      fixture.destroy();
+    });
+
+    it('edits and deletes a pending Freikampf but offers neither for regular fights', () => {
+      apiMock.updateFreeFight = vi.fn().mockReturnValue(of(freeFight()));
+      apiMock.deleteFreeFight = vi.fn().mockReturnValue(of(undefined));
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const { fixture, element } = setup(queueWith(pendingFight(), [freeFight()]));
+
+      expect(element.querySelectorAll('.upcoming-item__edit').length).toBe(1);
+      expect(element.querySelector('.free-fight-actions')).toBeNull();
+
+      click(fixture, element, '.upcoming-item__edit');
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+      click(fixture, element, '.upcoming-item__delete');
+
+      expect(apiMock.updateFreeFight).toHaveBeenCalledWith('tournament-1', 'free-1', {
+        white: { athleteId: null, name: 'Gast 1' },
+        blue: { athleteId: null, name: 'Gast 2' },
+        matchDurationSeconds: 120,
+        goldenScoreEnabled: false,
+        goldenScoreDurationSeconds: 180,
+      });
+      expect(apiMock.deleteFreeFight).toHaveBeenCalledWith('tournament-1', 'free-1');
+      fixture.destroy();
+    });
+
+    it('takes the fight time as m:ss and rejects an invalid time without saving', async () => {
+      apiMock.createFreeFight = vi.fn().mockReturnValue(of(freeFight()));
+      const { fixture, element } = setup(queueWith(pendingFight()));
+
+      click(fixture, element, '.upcoming-list__add');
+      // ngModel writes its initial value in a microtask.
+      await Promise.resolve();
+      const duration = element.querySelector('input[name="freeFightDuration"]') as HTMLInputElement;
+      expect(duration.value).toBe('4:00');
+
+      duration.value = '2:3';
+      duration.dispatchEvent(new Event('input'));
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+      expect(element.querySelector('.free-fight-dialog__error')?.textContent).toContain('freeFight.invalidTime');
+      expect(apiMock.createFreeFight).not.toHaveBeenCalled();
+
+      duration.value = '2:30';
+      duration.dispatchEvent(new Event('input'));
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+      expect(apiMock.createFreeFight).toHaveBeenCalledWith('tournament-1', 'tatami-1', expect.objectContaining({
+        matchDurationSeconds: 150,
+      }));
+      fixture.destroy();
+    });
+
+    it('reloads the queue when a Freikampf of the selected tatami was deleted elsewhere', () => {
+      const { fixture } = setup(queueWith(pendingFight(), [freeFight()]));
+      getTatamiQueueSpy.mockClear();
+
+      tatamiQueueChanges.next({ tournamentId: 'tournament-1', tatamiId: 'other-tatami' });
+      expect(getTatamiQueueSpy).not.toHaveBeenCalled();
+
+      tatamiQueueChanges.next({ tournamentId: 'tournament-1', tatamiId: 'tatami-1' });
+      expect(getTatamiQueueSpy).toHaveBeenCalled();
       fixture.destroy();
     });
   });

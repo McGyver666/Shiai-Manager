@@ -502,6 +502,7 @@ public sealed class RankingService : IRankingService
 
         var fights = await _dbContext.Fights
             .AsNoTracking()
+            .OfficialOnly()
             .Where(f => f.TournamentId == tournamentId && !f.IsBye)
             .ToListAsync(cancellationToken);
 
@@ -512,7 +513,7 @@ public sealed class RankingService : IRankingService
 
         foreach (var fight in fights)
         {
-            if (!categoryById.TryGetValue(fight.CategoryId, out var ageGroup))
+            if (fight.CategoryId is not { } categoryId || !categoryById.TryGetValue(categoryId, out var ageGroup))
             {
                 continue;
             }
@@ -619,6 +620,7 @@ public sealed class RankingService : IRankingService
 
         var fights = await _dbContext.Fights
             .AsNoTracking()
+            .OfficialOnly()
             .Where(f => f.TournamentId == tournamentId && !f.IsBye)
             .ToListAsync(cancellationToken);
 

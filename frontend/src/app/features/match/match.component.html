@@ -48,14 +48,14 @@
           <div class="modal-next-fight__category">{{ categoryName(nextFight.categoryId) }}</div>
           <div class="modal-next-fight__athletes">
             <span class="fight-athlete-meta">
-              <span class="athlete--white">{{ athleteName(nextFight.whiteAthleteId) }}</span>
+              <span class="athlete--white">{{ sideName(nextFight, 'white') }}</span>
               @if (athleteClubName(nextFight.whiteAthleteId); as clubName) {
                 <span class="fight-athlete-meta__club">{{ clubName }}</span>
               }
             </span>
             <span>{{ 'common.vs' | t }}</span>
             <span class="fight-athlete-meta">
-              <span class="athlete--blue">{{ athleteName(nextFight.blueAthleteId) }}</span>
+              <span class="athlete--blue">{{ sideName(nextFight, 'blue') }}</span>
               @if (athleteClubName(nextFight.blueAthleteId); as clubName) {
                 <span class="fight-athlete-meta__club">{{ clubName }}</span>
               }
@@ -73,13 +73,29 @@
     </section>
   }
 
+  @if (freeFightDialog(); as dialog) {
+    <app-free-fight-dialog
+      [tournamentId]="context.tournamentId() ?? ''"
+      [tatamiId]="selectedTatamiId() ?? ''"
+      [fight]="dialog.fight"
+      [athletes]="athleteList()"
+      [insufficientRestAthleteIds]="insufficientRestAthleteIds()"
+      [accentSideLabelKey]="sideTheme.accentSideLabelKey(context.tournament())"
+      (saved)="onFreeFightSaved()"
+      (cancelled)="closeFreeFightDialog()" />
+  }
+
   @if (selectedTatamiId()) {
     <div class="queue-panel">
       @if (currentFight(); as fight) {
         <section class="fight-card fight-card--current card">
           <div class="fight-card__header">
             <div class="fight-card__meta">
-              <span class="badge-bracket">{{ fight.bracketType === 'Repechage' ? ('match.repechage' | t) : ('match.mainBracket' | t) }}</span>
+              @if (fight.freeFight) {
+                <span class="badge-bracket badge-bracket--free">{{ 'freeFight.label' | t }}</span>
+              } @else {
+                <span class="badge-bracket">{{ fight.bracketType === 'Repechage' ? ('match.repechage' | t) : ('match.mainBracket' | t) }}</span>
+              }
               <span class="fight-status">{{ statusLabelKey(fight.status) | t }}</span>
             </div>
             <div class="fight-card__clock">
@@ -94,10 +110,10 @@
           </div>
 
           <div class="fight-grid">
-            <article class="athlete-card athlete-card--white" [class.athlete-card--winner]="fight.winnerId === fight.whiteAthleteId">
+            <article class="athlete-card athlete-card--white" [class.athlete-card--winner]="isWinningSide(fight, 'white')">
               <header class="athlete-card__header">
                 <span class="athlete-card__side">{{ 'match.whiteSide' | t }}</span>
-                <span class="athlete-card__name">{{ athleteName(fight.whiteAthleteId) }}</span>
+                <span class="athlete-card__name">{{ sideName(fight, 'white') }}</span>
                 @if (athleteClubName(fight.whiteAthleteId); as clubName) {
                   <span class="athlete-card__club">{{ clubName }}</span>
                 }
@@ -142,14 +158,22 @@
             <article class="center-column">
               <div class="fight-context fight-context--current">
                 <span class="fight-context__category">{{ categoryName(fight.categoryId) }}</span>
-                <span class="fight-context__meta">{{ 'draw.fight' | t: { n: fight.fightNumber } }}</span>
-                <span class="fight-context__meta">{{ 'draw.round' | t: { n: fight.round } }}</span>
+                @if (!fight.freeFight) {
+                  <span class="fight-context__meta">{{ 'draw.fight' | t: { n: fight.fightNumber } }}</span>
+                  <span class="fight-context__meta">{{ 'draw.round' | t: { n: fight.round } }}</span>
+                }
               </div>
               <div class="fight-vs">{{ 'common.vs' | t }}</div>
 
               <div class="fight-controls">
                 @if (fight.status === 'Pending') {
                   <button class="btn btn--primary btn--full btn--fight-start-stop" [disabled]="!canOperateLive()" (click)="startFight(fight)">{{ 'match.startFight' | t }}</button>
+                  @if (canEditFreeFight(fight)) {
+                    <div class="free-fight-actions">
+                      <button class="btn btn--tiny btn--secondary" type="button" (click)="openEditFreeFight(fight)">{{ 'freeFight.edit' | t }}</button>
+                      <button class="btn btn--tiny btn--negative" type="button" (click)="deleteFreeFight(fight)">{{ 'freeFight.delete' | t }}</button>
+                    </div>
+                  }
                 }
                 @if (fight.status === 'InProgress') {
                   <button class="btn btn--secondary btn--full btn--fight-start-stop" [disabled]="!canOperateLive()" (click)="stopFight(fight)">{{ 'match.stopFight' | t }}</button>
@@ -181,20 +205,20 @@
               </section>
 
               @if (fight.status === 'InProgress' || fight.status === 'Paused') {
-                <div class="confirm-row" [class.confirm-row--team-matchday]="context.tournament()?.competitionMode === 'TeamMatchday'">
-                  <button class="btn btn--confirm btn--white" [disabled]="!canOperateLive()" (click)="confirmWinner(fight, fight.whiteAthleteId!)">{{ 'match.confirmWhiteWins' | t }}</button>
-                  @if (context.tournament()?.competitionMode === 'TeamMatchday') {
+                <div class="confirm-row" [class.confirm-row--team-matchday]="canConfirmDraw(fight)">
+                  <button class="btn btn--confirm btn--white" [disabled]="!canOperateLive()" (click)="confirmSideWins(fight, 'white')">{{ 'match.confirmWhiteWins' | t }}</button>
+                  @if (canConfirmDraw(fight)) {
                     <button class="btn btn--confirm btn--draw" [disabled]="!canOperateLive()" (click)="confirmDraw(fight)">{{ 'match.confirmHikiwake' | t }}</button>
                   }
-                  <button class="btn btn--confirm btn--blue" [disabled]="!canOperateLive()" (click)="confirmWinner(fight, fight.blueAthleteId!)">{{ confirmWinnerLabelKey() | t }}</button>
+                  <button class="btn btn--confirm btn--blue" [disabled]="!canOperateLive()" (click)="confirmSideWins(fight, 'blue')">{{ confirmWinnerLabelKey() | t }}</button>
                 </div>
               }
             </article>
 
-            <article class="athlete-card athlete-card--blue" [class.athlete-card--winner]="fight.winnerId === fight.blueAthleteId">
+            <article class="athlete-card athlete-card--blue" [class.athlete-card--winner]="isWinningSide(fight, 'blue')">
               <header class="athlete-card__header">
                 <span class="athlete-card__side">{{ sideTheme.accentSideLabelKey(context.tournament()) | t }}</span>
-                <span class="athlete-card__name">{{ athleteName(fight.blueAthleteId) }}</span>
+                <span class="athlete-card__name">{{ sideName(fight, 'blue') }}</span>
                 @if (athleteClubName(fight.blueAthleteId); as clubName) {
                   <span class="athlete-card__club">{{ clubName }}</span>
                 }
@@ -245,6 +269,9 @@
         <div class="upcoming-list__header">
           <h2 class="upcoming-list__title">{{ 'match.upcomingFights' | t }}</h2>
           <span class="upcoming-list__count">{{ upcomingFights().length }}</span>
+          @if (canOperateLive()) {
+            <button class="btn btn--tiny btn--secondary upcoming-list__add" type="button" (click)="openCreateFreeFight()">{{ 'freeFight.add' | t }}</button>
+          }
         </div>
 
         @for (fight of upcomingFights(); track fight.id; let i = $index) {
@@ -263,8 +290,10 @@
                 </div>
                 <div class="fight-context fight-context--upcoming">
                   <span class="fight-context__category">{{ categoryName(fight.categoryId) }}</span>
-                  <span class="fight-context__meta">{{ 'draw.fight' | t: { n: fight.fightNumber } }}</span>
-                  <span class="fight-context__meta">{{ 'draw.round' | t: { n: fight.round } }}</span>
+                  @if (!fight.freeFight) {
+                    <span class="fight-context__meta">{{ 'draw.fight' | t: { n: fight.fightNumber } }}</span>
+                    <span class="fight-context__meta">{{ 'draw.round' | t: { n: fight.round } }}</span>
+                  }
                   @if (seriesLabel(fight, 'inSeries'); as label) {
                     <span class="fight-context__meta">{{ label }}</span>
                   }
@@ -272,7 +301,7 @@
               </div>
               <div class="fight-athletes-compact">
                 <span class="fight-athlete-meta">
-                  <span class="athlete--white">{{ athleteName(fight.whiteAthleteId) }}</span>
+                  <span class="athlete--white">{{ sideName(fight, 'white') }}</span>
                   @if (athleteClubName(fight.whiteAthleteId); as clubName) {
                     <span class="fight-athlete-meta__club">{{ clubName }}</span>
                   }
@@ -282,7 +311,7 @@
                 </span>
                 <span> vs </span>
                 <span class="fight-athlete-meta">
-                  <span class="athlete--blue">{{ athleteName(fight.blueAthleteId) }}</span>
+                  <span class="athlete--blue">{{ sideName(fight, 'blue') }}</span>
                   @if (athleteClubName(fight.blueAthleteId); as clubName) {
                     <span class="fight-athlete-meta__club">{{ clubName }}</span>
                   }
@@ -307,6 +336,20 @@
                 [attr.aria-label]="'match.moveDown' | t"
                 [title]="'match.moveDown' | t"
                 (click)="moveFightDown(fight, i)">▼</button>
+              @if (canEditFreeFight(fight)) {
+                <button
+                  class="btn btn--tiny btn--secondary upcoming-item__edit"
+                  type="button"
+                  [attr.aria-label]="'freeFight.edit' | t"
+                  [title]="'freeFight.edit' | t"
+                  (click)="openEditFreeFight(fight)">✎</button>
+                <button
+                  class="btn btn--tiny btn--negative upcoming-item__delete"
+                  type="button"
+                  [attr.aria-label]="'freeFight.delete' | t"
+                  [title]="'freeFight.delete' | t"
+                  (click)="deleteFreeFight(fight)">✕</button>
+              }
             </div>
           </div>
         } @empty {

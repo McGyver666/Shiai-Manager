@@ -42,6 +42,15 @@ public sealed class AuthorizationAttributesTests
     }
 
     [Fact]
+    public void FreeFightsController_HasClassLevelLiveFightAuthorization()
+    {
+        var authorize = typeof(FreeFightsController).GetCustomAttribute<AuthorizeAttribute>();
+
+        Assert.NotNull(authorize);
+        Assert.Equal("LiveFightOperation", authorize!.Policy);
+    }
+
+    [Fact]
     public void MatchController_HasClassLevelLiveFightAuthorization()
     {
         var authorize = typeof(MatchController).GetCustomAttribute<AuthorizeAttribute>();

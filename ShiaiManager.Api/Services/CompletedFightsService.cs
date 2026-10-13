@@ -30,6 +30,7 @@ public sealed class CompletedFightsService : ICompletedFightsService
     {
         var completedFights = await _dbContext.Fights
             .AsNoTracking()
+            .OfficialOnly()
             .Where(f => f.TournamentId == tournamentId
                         && f.Status == CompletedStatus
                         && !f.IsBye)
@@ -37,8 +38,9 @@ public sealed class CompletedFightsService : ICompletedFightsService
 
         // SQLite cannot ORDER BY DateTimeOffset, so order in memory after materializing.
         var fights = completedFights
-            .OrderByDescending(f => f.CompletedAtUtc)
-            .ThenByDescending(f => f.UpdatedAtUtc)
+            .WithCategory()
+            .OrderByDescending(x => x.Fight.CompletedAtUtc)
+            .ThenByDescending(x => x.Fight.UpdatedAtUtc)
             .ToList();
 
         if (fights.Count == 0)
@@ -47,7 +49,7 @@ public sealed class CompletedFightsService : ICompletedFightsService
         }
 
         var athleteIds = fights
-            .SelectMany(f => new[] { f.WhiteAthleteId, f.BlueAthleteId, f.WinnerId })
+            .SelectMany(x => new[] { x.Fight.WhiteAthleteId, x.Fight.BlueAthleteId, x.Fight.WinnerId })
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .Distinct()
@@ -66,7 +68,7 @@ public sealed class CompletedFightsService : ICompletedFightsService
             .Select(c => new { c.Id, c.Name })
             .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
 
-        var categoryIds = fights.Select(f => f.CategoryId).Distinct().ToHashSet();
+        var categoryIds = fights.Select(x => x.CategoryId).ToHashSet();
         var categoryNames = await _dbContext.Categories
             .AsNoTracking()
             .Where(c => categoryIds.Contains(c.Id))
@@ -76,8 +78,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
         var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, categoryIds, cancellationToken);
 
         var tatamiIds = fights
-            .Where(f => f.TatamiId.HasValue)
-            .Select(f => f.TatamiId!.Value)
+            .Where(x => x.Fight.TatamiId.HasValue)
+            .Select(x => x.Fight.TatamiId!.Value)
             .Distinct()
             .ToHashSet();
         var tatamiNames = await _dbContext.Tatamis
@@ -134,11 +136,11 @@ public sealed class CompletedFightsService : ICompletedFightsService
             return seconds < 0 ? null : seconds;
         }
 
-        return fights
-            .Select(f => new CompletedFightSummary(
+        CompletedFightSummary Summarize(FightRecord f, Guid categoryId) =>
+            new(
                 f.Id,
-                f.CategoryId,
-                categoryNames.TryGetValue(f.CategoryId, out var catName) ? catName : UnknownName,
+                categoryId,
+                categoryNames.TryGetValue(categoryId, out var catName) ? catName : UnknownName,
                 f.BracketType,
                 f.Round,
                 f.FightNumber,
@@ -166,7 +168,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
                 f.StartedAtUtc,
                 f.CompletedAtUtc!.Value,
                 DurationSeconds(f),
-                BestOfThreeSeries.DescribeOrNull(f, seriesBouts)))
-            .ToArray();
+                BestOfThreeSeries.DescribeOrNull(f, seriesBouts));
+
+        return fights.Select(x => Summarize(x.Fight, x.CategoryId)).ToArray();
     }
 }

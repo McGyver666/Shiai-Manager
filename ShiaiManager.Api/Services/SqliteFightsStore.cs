@@ -38,7 +38,7 @@ public sealed class SqliteFightsStore : IFightsStore
 
         var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, [categoryId], cancellationToken);
         return records
-            .Select(r => MapToModel(r) with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) })
+            .Select(r => FightMapper.ToModel(r) with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) })
             .ToArray();
     }
 
@@ -50,47 +50,8 @@ public sealed class SqliteFightsStore : IFightsStore
             .FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
         if (record is null) return null;
 
-        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, [record.CategoryId], cancellationToken);
-        return MapToModel(record) with { Series = BestOfThreeSeries.DescribeOrNull(record, seriesBouts) };
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
+            _dbContext, record.CategoryId is { } categoryId ? [categoryId] : [], cancellationToken);
+        return FightMapper.ToModel(record) with { Series = BestOfThreeSeries.DescribeOrNull(record, seriesBouts) };
     }
-
-    private static Fight MapToModel(FightRecord r) =>
-        new(r.Id,
-            r.TournamentId,
-            r.CategoryId,
-            Enum.Parse<FightBracketType>(r.BracketType),
-            r.Round,
-            r.FightNumber,
-            r.PoolNumber,
-            r.WhiteSourceFightId,
-            r.WhiteSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.WhiteSourceOutcome),
-            r.BlueSourceFightId,
-            r.BlueSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.BlueSourceOutcome),
-            r.WhiteAthleteId,
-            r.BlueAthleteId,
-            r.WinnerId,
-            r.IsBye,
-            Enum.Parse<FightStatus>(r.Status),
-            r.TatamiId,
-            r.QueueOrder,
-            r.WhiteScore,
-            r.BlueScore,
-            r.WhitePenalties,
-            r.BluePenalties,
-            r.WhiteIpponCount,
-            r.WhiteWazaAriCount,
-            r.WhiteYukoCount,
-            r.BlueIpponCount,
-            r.BlueWazaAriCount,
-            r.BlueYukoCount,
-            r.PausedAtUtc,
-            r.OsaeKomiSide,
-            r.OsaeKomiStartedAtUtc,
-            r.OsaeKomiPausedAtUtc,
-            r.OsaeKomiElapsedMilliseconds,
-            r.StartedAtUtc,
-            r.CompletedAtUtc,
-            r.CreatedAtUtc,
-            r.UpdatedAtUtc,
-            IsGoldenScore: false);
 }

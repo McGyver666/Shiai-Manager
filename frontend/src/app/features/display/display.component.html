@@ -63,7 +63,7 @@
           <div class="tatami-scoreboard">
             <article class="tatami-athlete tatami-athlete--blue">
               <div class="tatami-athlete-side">{{ sideTheme.accentSideLabelKey(tournament()) | t }}</div>
-              <div class="tatami-athlete-name">{{ athleteName(d.current.blueAthleteId) }}</div>
+              <div class="tatami-athlete-name">{{ sideName(d.current, 'blue') }}</div>
               <div class="tatami-athlete-club">{{ athleteClub(d.current.blueAthleteId) }}</div>
 
               <div class="tatami-counters tatami-counters--triple">
@@ -89,7 +89,7 @@
 
             <article class="tatami-athlete tatami-athlete--white">
               <div class="tatami-athlete-side">{{ 'match.whiteSide' | t }}</div>
-              <div class="tatami-athlete-name">{{ athleteName(d.current.whiteAthleteId) }}</div>
+              <div class="tatami-athlete-name">{{ sideName(d.current, 'white') }}</div>
               <div class="tatami-athlete-club">{{ athleteClub(d.current.whiteAthleteId) }}</div>
 
               <div class="tatami-counters tatami-counters--triple">
@@ -125,9 +125,9 @@
                 <div class="next-item next-item--xl">
                   <div class="next-category">{{ categoryName(fight.categoryId) }}</div>
                   <div class="next-line">
-                    <span class="blue-name next-name--blue">{{ athleteName(fight.blueAthleteId) }}</span>
+                    <span class="blue-name next-name--blue">{{ sideName(fight, 'blue') }}</span>
                     <span class="next-vs">{{ 'common.vs' | t }}</span>
-                    <span class="white-name next-name--white">{{ athleteName(fight.whiteAthleteId) }}</span>
+                    <span class="white-name next-name--white">{{ sideName(fight, 'white') }}</span>
                   </div>
                 </div>
               }
@@ -167,7 +167,7 @@
               </div>
               <div class="fight-row">
                 <div class="athlete-col athlete-col--blue-left">
-                  <span class="athlete-name">{{ athleteName(d.current.blueAthleteId) }}</span>
+                  <span class="athlete-name">{{ sideName(d.current, 'blue') }}</span>
                   <span class="athlete-club">{{ athleteClub(d.current.blueAthleteId) }}</span>
                   <div class="score-grid">
                     <div class="score-row"><span>{{ 'match.ippon' | t }}</span><strong>{{ scoreCount(d.current, 'blue', 'ippon') }}</strong></div>
@@ -181,7 +181,7 @@
                 </div>
                 <div class="fight-sep">—</div>
                 <div class="athlete-col athlete-col--white-right">
-                  <span class="athlete-name">{{ athleteName(d.current.whiteAthleteId) }}</span>
+                  <span class="athlete-name">{{ sideName(d.current, 'white') }}</span>
                   <span class="athlete-club">{{ athleteClub(d.current.whiteAthleteId) }}</span>
                   <div class="score-grid">
                     <div class="score-row"><span>{{ 'match.ippon' | t }}</span><strong>{{ scoreCount(d.current, 'white', 'ippon') }}</strong></div>
@@ -207,9 +207,9 @@
                   <div class="next-item">
                     <div class="next-category">{{ categoryName(fight.categoryId) }}</div>
                     <div class="next-line">
-                      <span class="blue-name">{{ athleteName(fight.blueAthleteId) }}</span>
+                      <span class="blue-name">{{ sideName(fight, 'blue') }}</span>
                       <span class="next-vs">{{ 'common.vs' | t }}</span>
-                      <span class="white-name">{{ athleteName(fight.whiteAthleteId) }}</span>
+                      <span class="white-name">{{ sideName(fight, 'white') }}</span>
                     </div>
                   </div>
                 }

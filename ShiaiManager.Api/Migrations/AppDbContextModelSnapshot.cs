@@ -15,7 +15,7 @@ namespace ShiaiManager.Api.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
             modelBuilder.Entity("ShiaiManager.Api.Data.AthleteRecord", b =>
                 {
@@ -345,6 +345,10 @@ namespace ShiaiManager.Api.Migrations
                     b.Property<int>("BlueIpponCount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("BlueName")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("BluePenalties")
                         .HasColumnType("INTEGER");
 
@@ -369,7 +373,7 @@ namespace ShiaiManager.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("CategoryId")
+                    b.Property<Guid?>("CategoryId")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("CompletedAtUtc")
@@ -381,7 +385,23 @@ namespace ShiaiManager.Api.Migrations
                     b.Property<int>("FightNumber")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("GoldenScoreDurationSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("GoldenScoreEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsBye")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Regular");
+
+                    b.Property<int?>("MatchDurationSeconds")
                         .HasColumnType("INTEGER");
 
                     b.Property<long>("OsaeKomiElapsedMilliseconds")
@@ -434,6 +454,10 @@ namespace ShiaiManager.Api.Migrations
                     b.Property<int>("WhiteIpponCount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WhiteName")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("WhitePenalties")
                         .HasColumnType("INTEGER");
 
@@ -454,6 +478,10 @@ namespace ShiaiManager.Api.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("WinnerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WinnerSide")
+                        .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -930,8 +958,7 @@ namespace ShiaiManager.Api.Migrations
                     b.HasOne("ShiaiManager.Api.Data.CategoryRecord", "Category")
                         .WithMany()
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ShiaiManager.Api.Data.TatamiRecord", null)
                         .WithMany()

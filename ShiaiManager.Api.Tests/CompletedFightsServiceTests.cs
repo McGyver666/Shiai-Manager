@@ -95,6 +95,25 @@ public sealed class CompletedFightsServiceTests
     }
 
     [Fact]
+    public async Task GetCompletedFights_ExcludesFreikaempfe()
+    {
+        await using var ctx = CreateDbContext();
+        var (tid, cid, tatamiId, athletes) = await SeedAsync(ctx, 2);
+        var now = DateTimeOffset.UtcNow;
+        var official = CompletedFight(tid, cid, athletes[0], athletes[1], athletes[0], tatamiId, now);
+        var freeFight = CompletedFight(tid, cid, athletes[1], athletes[0], athletes[1], tatamiId, now);
+        freeFight.Kind = nameof(FightKind.Free);
+        freeFight.CategoryId = null;
+        freeFight.WinnerSide = nameof(FightSide.White);
+        ctx.Fights.AddRange(official, freeFight);
+        await ctx.SaveChangesAsync();
+
+        var result = await new CompletedFightsService(ctx).GetCompletedFightsAsync(tid, CancellationToken.None);
+
+        Assert.Equal(official.Id, Assert.Single(result).FightId);
+    }
+
+    [Fact]
     public async Task GetCompletedFights_ExcludesByesAndUnfinishedFights()
     {
         await using var ctx = CreateDbContext();

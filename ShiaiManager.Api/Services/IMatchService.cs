@@ -135,12 +135,14 @@ public interface IMatchService
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Confirms the winner of an in-progress fight, or records a Hiki-wake for a team-matchday fight,
-    /// completes it, propagates the result and writes an audit entry.
+    /// Confirms the result of an in-progress fight, completes it, propagates the result and writes an audit entry.
+    /// A regular fight takes the winning athlete (<paramref name="winnerId"/>; null = Hiki-wake, team matchday only).
+    /// A Freikampf takes the winning side (<paramref name="winnerSide"/>; null = Hiki-wake) and rejects athlete ids.
     /// </summary>
     Task<MatchActionResult> ConfirmResultAsync(
         Guid fightId,
         Guid? winnerId,
+        FightSide? winnerSide,
         string user,
         CancellationToken cancellationToken);
 

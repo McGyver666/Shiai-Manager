@@ -35,6 +35,7 @@ public sealed class TournamentOverviewStatsService : IOverviewStatsService
             .CountAsync(c => c.TournamentId == tournamentId, cancellationToken);
         var fights = await _dbContext.Fights
             .AsNoTracking()
+            .OfficialOnly()
             .Where(f => f.TournamentId == tournamentId && !f.IsBye)
             .Select(f => new
             {

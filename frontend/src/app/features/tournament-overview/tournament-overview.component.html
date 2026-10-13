@@ -57,7 +57,7 @@
           <div class="hero-board">
             <article class="hero-fighter hero-fighter--accent" [class.hero-fighter--blue]="tournament()?.accentSideColor !== 'Red'">
               <div class="fighter-side-label">{{ fighterSideLabel() }}</div>
-              <h3>{{ athleteName(hero.fight.blueAthleteId) }}</h3>
+              <h3>{{ sideName(hero.fight, 'blue') }}</h3>
               <p>{{ athleteClub(hero.fight.blueAthleteId) }}</p>
               <div class="fighter-score-row">
                 <div class="fighter-score fighter-score--ippon" [class.fighter-score--active]="hero.fight.blueIpponCount > 0">
@@ -107,7 +107,7 @@
 
             <article class="hero-fighter hero-fighter--shiro">
               <div class="fighter-side-label">{{ 'tournamentOverview.shiro' | t }} · {{ sideLabel('white') }}</div>
-              <h3>{{ athleteName(hero.fight.whiteAthleteId) }}</h3>
+              <h3>{{ sideName(hero.fight, 'white') }}</h3>
               <p>{{ athleteClub(hero.fight.whiteAthleteId) }}</p>
               <div class="fighter-score-row">
                 <div class="fighter-score fighter-score--ippon" [class.fighter-score--active]="hero.fight.whiteIpponCount > 0">
@@ -164,9 +164,9 @@
               @if (fight) {
                 <p class="tatami-category">{{ categoryName(fight.categoryId) }}@if (seriesLabel(fight); as label) {<span class="series-label"> · {{ label }}</span>}</p>
                 <div class="tatami-pairing">
-                  <span class="pairing-accent">{{ athleteName(fight.blueAthleteId) }}</span>
+                  <span class="pairing-accent">{{ sideName(fight, 'blue') }}</span>
                   <span class="pairing-vs">{{ 'common.vs' | t }}</span>
-                  <span class="pairing-shiro">{{ athleteName(fight.whiteAthleteId) }}</span>
+                  <span class="pairing-shiro">{{ sideName(fight, 'white') }}</span>
                 </div>
                 <div class="progress-track" role="progressbar" [attr.aria-valuenow]="progressPercent(fight)" aria-valuemin="0" aria-valuemax="100" [attr.aria-label]="'tournamentOverview.fightProgress' | t">
                   <span [style.width.%]="progressPercent(fight)"></span>
@@ -218,8 +218,8 @@
                 <div class="queue-content">
                   <span class="queue-tatami">{{ entry.tatami.name }} · {{ categoryName(entry.fight.categoryId) }}@if (seriesLabel(entry.fight); as label) { · {{ label }}
                   }</span>
-                  <strong>{{ athleteName(entry.fight.blueAthleteId) }}</strong>
-                  <span>{{ 'common.vs' | t }} {{ athleteName(entry.fight.whiteAthleteId) }}</span>
+                  <strong>{{ sideName(entry.fight, 'blue') }}</strong>
+                  <span>{{ 'common.vs' | t }} {{ sideName(entry.fight, 'white') }}</span>
                 </div>
               </li>
             }

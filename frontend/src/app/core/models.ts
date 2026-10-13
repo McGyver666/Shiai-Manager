@@ -33,6 +33,8 @@ export type TeamMatchdayProfile = 'SeniorMen' | 'SeniorWomen' | 'U16Boys' | 'U16
 
 /** Side designation used by the match API. */
 export type FightSide = 'white' | 'blue';
+/** Side as the API names it in results (server enum FightSide). */
+export type WinningSide = 'White' | 'Blue';
 
 /** Whether a fight belongs to the main bracket, the repechage, or a round-robin group stage. */
 export type FightBracketType = 'Main' | 'Repechage' | 'GroupStage';
@@ -454,10 +456,21 @@ export interface FightSeries {
   blueWins: number;
 }
 
+/** Freikampf data (ADR-0013); the free-text name is null for a side with a selected athlete. */
+export interface FreeFightDetails {
+  whiteName: string | null;
+  blueName: string | null;
+  matchDurationSeconds: number;
+  goldenScoreEnabled: boolean;
+  goldenScoreDurationSeconds: number;
+  winnerSide: WinningSide | null;
+}
+
 export interface Fight {
   id: string;
   tournamentId: string;
-  categoryId: string;
+  /** Null only for a Freikampf. */
+  categoryId: string | null;
   bracketType: FightBracketType;
   round: number;
   fightNumber: number;
@@ -493,6 +506,8 @@ export interface Fight {
   isGoldenScore: boolean;
   /** Set only for fights of a Kampfserie (Best of Three). */
   series?: FightSeries | null;
+  /** Set only for a Freikampf. */
+  freeFight?: FreeFightDetails | null;
   createdAtUtc: string;
   updatedAtUtc: string;
 }
@@ -613,7 +628,28 @@ export interface OsaeKomiRequest {
 }
 
 export interface ConfirmResultRequest {
+  /** Winning athlete of a regular fight; null records a Hiki-wake (team matchday). */
   winnerId: string | null;
+  /** Winning side of a Freikampf; null records a Hiki-wake. */
+  winnerSide?: WinningSide | null;
+}
+
+/** One side of a Freikampf: an athlete of the tournament or a free-text name. */
+export interface FreeFightSideRequest {
+  athleteId: string | null;
+  name: string | null;
+}
+
+export interface FreeFightRequest {
+  white: FreeFightSideRequest;
+  blue: FreeFightSideRequest;
+  matchDurationSeconds: number;
+  goldenScoreEnabled: boolean;
+  goldenScoreDurationSeconds: number;
+}
+
+export interface CreateFreeFightRequest extends FreeFightRequest {
+  placeNext: boolean;
 }
 
 export interface AssignTatamiRequest {

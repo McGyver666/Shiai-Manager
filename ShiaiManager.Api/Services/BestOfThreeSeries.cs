@@ -61,7 +61,9 @@ internal static class BestOfThreeSeries
 
     /// <summary>Describes <paramref name="bout"/> when its category is a Kampfserie, otherwise null.</summary>
     public static FightSeries? DescribeOrNull(FightRecord bout, IReadOnlyDictionary<Guid, List<FightRecord>> boutsByCategory) =>
-        boutsByCategory.TryGetValue(bout.CategoryId, out var bouts) ? Describe(bout, bouts) : null;
+        bout.CategoryId is { } categoryId && boutsByCategory.TryGetValue(categoryId, out var bouts)
+            ? Describe(bout, bouts)
+            : null;
 
     /// <summary>
     /// Loads all bouts of the Best-of-Three categories among <paramref name="categoryIds"/>, keyed by category;
@@ -82,9 +84,11 @@ internal static class BestOfThreeSeries
 
         var bouts = await dbContext.Fights
             .AsNoTracking()
-            .Where(f => seriesCategoryIds.Contains(f.CategoryId))
+            .Where(f => f.CategoryId != null && seriesCategoryIds.Contains(f.CategoryId.Value))
             .ToListAsync(cancellationToken);
-        return bouts.GroupBy(f => f.CategoryId).ToDictionary(g => g.Key, g => g.ToList());
+        return bouts.WithCategory()
+            .GroupBy(x => x.CategoryId, x => x.Fight)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     /// <summary>Creates a pending bout of a Kampfserie between the series' White and Blue athlete.</summary>
