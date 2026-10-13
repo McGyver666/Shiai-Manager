@@ -80,9 +80,8 @@
 .slot.blue {border-left:5px solid var(--side-accent)}
 .slot.winner {font-weight:700;color:var(--c-success)}
 .rounds-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.7rem}
-/* Kampfserie (Best of Three): bouts stacked under the Serienstand. */
-.series {display:flex;flex-direction:column;align-items:flex-start;gap:.7rem}
-.series-fights {width:100%;max-width:360px}
+/* Kampfserie (Best of Three): Serienstand above the bouts, which use the regular fight tiles. */
+.series {display:flex;flex-direction:column;gap:.7rem}
 :is(.round-title,.slot-name) {line-height:1.2}
 .slot-name {font-size:.9rem}
 .slot.placeholder .slot-name {color:var(--c-muted);font-weight:500;opacity:.78}
@@ -163,7 +162,8 @@
   .match-category-card--print .rounds-grid,
   .match-category-card--print .pool-block,
   .match-category-card--print .ko-phase-block,
-  .match-category-card--print .bracket-shell {
+  .match-category-card--print .bracket-shell,
+  .match-category-card--print .series {
     break-inside: avoid-page;
     page-break-inside: avoid;
   }

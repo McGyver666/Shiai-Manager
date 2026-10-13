@@ -46,7 +46,7 @@
                   @if (seriesScore(cat.id); as sides) {
                     <app-running-score [heading]="'series.heading' | t" [sides]="sides" />
                   }
-                  <div class="fights-list series-fights">
+                  <div class="rounds-grid">
                     @for (f of seriesFights(cat.id); track f.id) {
                       @let label = seriesFightLabel(f);
                       <div class="fight">
