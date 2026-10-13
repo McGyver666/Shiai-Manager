@@ -28,6 +28,7 @@ describe('MatchComponent', () => {
   let resumeFightSpy: Mock;
   let startOsaeKomiSpy: Mock;
   let stopOsaeKomiSpy: Mock;
+  let apiMock: Partial<ApiService>;
   let tournamentSignal: WritableSignal<Tournament>;
 
   function createTournament(): Tournament {
@@ -127,7 +128,7 @@ describe('MatchComponent', () => {
     const tournament = createTournament();
     tournamentSignal = signal(tournament);
 
-    const apiMock: Partial<ApiService> = {
+    apiMock = {
       getTournament: vi.fn().mockName('getTournament').mockReturnValue(of(tournament)),
       getAthletes: vi.fn().mockName('getAthletes').mockReturnValue(of([] as Athlete[])),
       getClubs: vi.fn().mockName('getClubs').mockReturnValue(of([] as Club[])),
@@ -161,6 +162,11 @@ describe('MatchComponent', () => {
       resumeFight: vi.fn().mockName('resumeFight').mockReturnValue(of(undefined)),
       startOsaeKomi: vi.fn().mockName('startOsaeKomi').mockReturnValue(of(undefined)),
       stopOsaeKomi: vi.fn().mockName('stopOsaeKomi').mockReturnValue(of(undefined)),
+      pauseOsaeKomi: vi.fn().mockName('pauseOsaeKomi').mockReturnValue(of(undefined)),
+      resumeOsaeKomi: vi.fn().mockName('resumeOsaeKomi').mockReturnValue(of(undefined)),
+      adjustScore: vi.fn().mockName('adjustScore').mockReturnValue(of(undefined)),
+      confirmResult: vi.fn().mockName('confirmResult').mockReturnValue(of(undefined)),
+      moveFightInQueue: vi.fn().mockName('moveFightInQueue').mockReturnValue(of(undefined)),
     };
 
     getTatamiQueueSpy = apiMock.getTatamiQueue as Mock;
@@ -174,7 +180,7 @@ describe('MatchComponent', () => {
     TestBed.configureTestingModule({
       providers: [
         { provide: ApiService, useValue: apiMock },
-        { provide: AuthStateService, useValue: { canOperate: signal(true) } },
+        { provide: AuthStateService, useValue: { canOperate: signal(true), canOperateLive: signal(true) } },
         {
           provide: TournamentContextService,
           useValue: {
@@ -208,6 +214,158 @@ describe('MatchComponent', () => {
         { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({})), queryParamMap: of(convertToParamMap({ tatamiId: 'tatami-1' })) } },
         { provide: Router, useValue: { navigate: vi.fn().mockName('navigate').mockResolvedValue(true) } },
       ],
+    });
+  });
+
+  describe('live operation rights', () => {
+    const CONTROL_SELECTORS = '.fight-controls button, .score-row__actions button, .osae-card__controls button, .confirm-row button, .upcoming-item__move';
+
+    function useAuth(canOperate: boolean, canOperateLive: boolean): void {
+      TestBed.overrideProvider(AuthStateService, {
+        useValue: { canOperate: signal(canOperate), canOperateLive: signal(canOperateLive) },
+      });
+    }
+
+    function queueOf(current: Fight): TatamiQueue {
+      const upcoming = [createFight({ id: 'fight-2', status: 'Pending' }), createFight({ id: 'fight-3', status: 'Pending' })];
+      return { current, next: upcoming[0], onDeck: upcoming[1], upcoming } as TatamiQueue;
+    }
+
+    function button(fixture: { nativeElement: HTMLElement }, selector: string): HTMLButtonElement {
+      const element = fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+      expect(element, selector).not.toBeNull();
+      return element!;
+    }
+
+    function clickEnabled(fixture: { nativeElement: HTMLElement; detectChanges: () => void }, selector: string): void {
+      const element = button(fixture, selector);
+      expect(element.disabled, selector).toBe(false);
+      element.click();
+      fixture.detectChanges();
+    }
+
+    const runningFight = (overrides: Partial<Fight> = {}) => createFight({
+      status: 'InProgress',
+      completedAtUtc: null,
+      whiteScore: 0,
+      whiteIpponCount: 0,
+      whiteWazaAriCount: 1,
+      ...overrides,
+    });
+
+    describe('as Competition (live operation without management rights)', () => {
+      beforeEach(() => useAuth(false, true));
+
+      it('starts a pending fight via button and space bar', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueOf(createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }))));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        clickEnabled(fixture, '.fight-controls button');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', cancelable: true }));
+
+        expect(startFightSpy).toHaveBeenCalledTimes(2);
+        fixture.destroy();
+      });
+
+      it('stops a running fight, records and removes scores, starts Osae-komi, and reorders the queue', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight())));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        clickEnabled(fixture, '.athlete-card--white .btn--positive');
+        clickEnabled(fixture, '.athlete-card--white .btn--negative:not(:disabled)');
+        clickEnabled(fixture, '.osae-card__controls .btn--white');
+        const moves = fixture.nativeElement.querySelectorAll('.upcoming-item__move') as NodeListOf<HTMLButtonElement>;
+        expect(moves.length).toBe(4);
+        moves[1].click();
+        moves[2].click();
+        clickEnabled(fixture, '.fight-controls button');
+
+        expect(apiMock.adjustScore).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white', scoreType: 'Ippon', delta: 1 }, expect.any(String));
+        expect(apiMock.adjustScore).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white', scoreType: 'WazaAri', delta: -1 }, expect.any(String));
+        expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white' }, expect.any(String));
+        expect(apiMock.moveFightInQueue).toHaveBeenCalledWith('tournament-1', 'fight-2', 'Down');
+        expect(apiMock.moveFightInQueue).toHaveBeenCalledWith('tournament-1', 'fight-3', 'Up');
+        expect(pauseFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+        fixture.destroy();
+      });
+
+      it('controls an active Osae-komi via buttons and the D shortcut', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight({
+          osaeKomiSide: 'White',
+          osaeKomiStartedAtUtc: new Date().toISOString(),
+        }))));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        const [, stop, toggle] = Array.from(fixture.nativeElement.querySelectorAll('.osae-card__controls button')) as HTMLButtonElement[];
+        expect(stop.disabled).toBe(false);
+        expect(toggle.disabled).toBe(false);
+        toggle.click();
+        stop.click();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', cancelable: true }));
+
+        expect(apiMock.pauseOsaeKomi).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+        expect(stopOsaeKomiSpy).toHaveBeenCalledTimes(2);
+        fixture.destroy();
+      });
+
+      it('resumes a paused fight', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight({ status: 'Paused' }))));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        clickEnabled(fixture, '.fight-controls button');
+
+        expect(resumeFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+        fixture.destroy();
+      });
+
+      it('confirms a winner and a Hiki-wake through the confirmation dialog', () => {
+        tournamentSignal.update((tournament) => ({ ...tournament, competitionMode: 'TeamMatchday' }));
+        getTatamiQueueSpy.mockReturnValue(of(queueOf(runningFight())));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        clickEnabled(fixture, '.confirm-row .btn--white');
+        clickEnabled(fixture, '.modal-card .btn--primary');
+        clickEnabled(fixture, '.confirm-row .btn--draw');
+        clickEnabled(fixture, '.modal-card .btn--primary');
+
+        expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'fight-1', { winnerId: 'athlete-white' }, expect.any(String));
+        expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'fight-1', { winnerId: null }, expect.any(String));
+        fixture.destroy();
+      });
+    });
+
+    describe('without live operation rights', () => {
+      beforeEach(() => useAuth(false, false));
+
+      it.each([
+        { status: 'Pending', fight: { status: 'Pending', startedAtUtc: null, completedAtUtc: null } },
+        { status: 'InProgress', fight: { status: 'InProgress', completedAtUtc: null, whiteIpponCount: 0, whiteWazaAriCount: 1 } },
+        { status: 'Paused', fight: { status: 'Paused', completedAtUtc: null, whiteIpponCount: 0, whiteWazaAriCount: 1 } },
+      ] satisfies { status: string; fight: Partial<Fight> }[])('disables every control and ignores shortcuts for a $status fight', ({ fight }) => {
+        tournamentSignal.update((tournament) => ({ ...tournament, competitionMode: 'TeamMatchday' }));
+        getTatamiQueueSpy.mockReturnValue(of(queueOf(createFight(fight))));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        const controls = Array.from(fixture.nativeElement.querySelectorAll(CONTROL_SELECTORS)) as HTMLButtonElement[];
+        expect(controls.length).toBeGreaterThan(0);
+        expect(controls.filter((control) => !control.disabled)).toEqual([]);
+
+        const events = [' ', 's', 'f', 'd'].map((key) => pressKey(document, key));
+
+        expect(events.some((event) => event.defaultPrevented)).toBe(false);
+        expect(startFightSpy).not.toHaveBeenCalled();
+        expect(pauseFightSpy).not.toHaveBeenCalled();
+        expect(resumeFightSpy).not.toHaveBeenCalled();
+        expect(startOsaeKomiSpy).not.toHaveBeenCalled();
+        expect(stopOsaeKomiSpy).not.toHaveBeenCalled();
+        fixture.destroy();
+      });
     });
   });
 
@@ -339,7 +497,7 @@ describe('MatchComponent', () => {
   it('ignores repeated, modified, invalid, unauthorized, and focused-input shortcuts', () => {
     const fixture = TestBed.createComponent(MatchComponent);
     const auth = TestBed.inject(AuthStateService) as AuthStateService & {
-      canOperate: WritableSignal<boolean>;
+      canOperateLive: WritableSignal<boolean>;
     };
     const component = fixture.componentInstance as any;
     const fight = createFight({ status: 'InProgress' });
@@ -350,9 +508,9 @@ describe('MatchComponent', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', repeat: true }));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', ctrlKey: true }));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }));
-    auth.canOperate.set(false);
+    auth.canOperateLive.set(false);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
-    auth.canOperate.set(true);
+    auth.canOperateLive.set(true);
 
     const editableElements = ['true', '', 'plaintext-only'].map((value) => {
       const element = document.createElement('div');

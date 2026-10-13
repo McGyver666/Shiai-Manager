@@ -225,6 +225,13 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
             (HttpMethod.Get, $"/api/tournaments/{tournamentId}/team-matchday/encounters/{Guid.NewGuid()}/lineups/1", null),
             (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/queue-move", JsonContent.Create(new { Direction = "Up" })),
             (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/start", null),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/stop", null),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/resume", null),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/score/adjust", JsonContent.Create(new { Side = "white", ScoreType = "Ippon", Delta = 1 })),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/start", JsonContent.Create(new { Side = "white" })),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/stop", null),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/pause", null),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/resume", null),
             (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/result", JsonContent.Create(new { WinnerId = Guid.NewGuid() })),
         };
 

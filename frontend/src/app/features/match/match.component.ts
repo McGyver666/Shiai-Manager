@@ -66,7 +66,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   private readonly hub = inject(TournamentHubService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  protected readonly canOperate = this.auth.canOperate;
+  protected readonly canOperateLive = this.auth.canOperateLive;
   private readonly time = inject(TimeService);
 
   protected readonly tatamis = signal<Tatami[]>([]);
@@ -312,7 +312,7 @@ export class MatchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.canOperate() || !this.context.tournamentId() || !this.selectedTatamiId()) {
+    if (!this.canOperateLive() || !this.context.tournamentId() || !this.selectedTatamiId()) {
       return;
     }
 
@@ -640,11 +640,11 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected canMoveUp(index: number): boolean {
-    return this.canOperate() && index > 0;
+    return this.canOperateLive() && index > 0;
   }
 
   protected canMoveDown(index: number): boolean {
-    return this.canOperate() && index < this.upcomingFights().length - 1;
+    return this.canOperateLive() && index < this.upcomingFights().length - 1;
   }
 
   protected moveFightUp(fight: Fight, index: number): void {
@@ -667,7 +667,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected startFight(fight: Fight): void {
-    if (!this.canOperate()) return;
+    if (!this.canOperateLive()) return;
     const tid = this.context.tournamentId();
     if (!tid) return;
     this.api.startFight(tid, fight.id, this.operatorName()).subscribe({
@@ -677,7 +677,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected pauseFight(fight: Fight): void {
-    if (!this.canOperate()) return;
+    if (!this.canOperateLive()) return;
     const tid = this.context.tournamentId();
     if (!tid) return;
     this.api.pauseFight(tid, fight.id, this.operatorName()).subscribe({
@@ -687,7 +687,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected resumeFight(fight: Fight): void {
-    if (!this.canOperate()) return;
+    if (!this.canOperateLive()) return;
     const tid = this.context.tournamentId();
     if (!tid) return;
     this.api.resumeFight(tid, fight.id, this.operatorName()).subscribe({
@@ -697,7 +697,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected adjustScore(fight: Fight, side: FightSide, scoreType: ScoreType, delta: number): void {
-    if (!this.canOperate()) return;
+    if (!this.canOperateLive()) return;
     const tid = this.context.tournamentId();
     if (!tid) return;
     const body: AdjustScoreRequest = { side, scoreType, delta };
@@ -708,7 +708,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected addScore(fight: Fight, side: 'white' | 'blue', points: number): void {
-    if (!this.canOperate()) return;
+    if (!this.canOperateLive()) return;
     const tid = this.context.tournamentId();
     if (!tid) return;
     const newWhite = side === 'white' ? fight.whiteScore + points : fight.whiteScore;
@@ -722,7 +722,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected addPenalty(fight: Fight, side: 'white' | 'blue'): void {
-    if (!this.canOperate()) return;
+    if (!this.canOperateLive()) return;
     const tid = this.context.tournamentId();
     if (!tid) return;
     const newWhiteP = side === 'white' ? fight.whitePenalties + 1 : fight.whitePenalties;
@@ -736,7 +736,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
     protected startOsaeKomi(fight: Fight, side: FightSide): void {
-      if (!this.canOperate()) return;
+      if (!this.canOperateLive()) return;
       const tid = this.context.tournamentId();
       if (!tid) return;
       const body: OsaeKomiRequest = { side };
@@ -747,7 +747,7 @@ export class MatchComponent implements OnInit, OnDestroy {
     }
 
     protected stopOsaeKomi(fight: Fight): void {
-      if (!this.canOperate()) return;
+      if (!this.canOperateLive()) return;
       const tid = this.context.tournamentId();
       if (!tid) return;
       this.api.stopOsaeKomi(tid, fight.id, this.operatorName()).subscribe({
@@ -757,7 +757,7 @@ export class MatchComponent implements OnInit, OnDestroy {
     }
 
     protected toggleOsaeKomi(fight: Fight): void {
-      if (!this.canOperate() || fight.osaeKomiSide === null) return;
+      if (!this.canOperateLive() || fight.osaeKomiSide === null) return;
       const tid = this.context.tournamentId();
       if (!tid) return;
 
@@ -773,7 +773,7 @@ export class MatchComponent implements OnInit, OnDestroy {
     }
 
   protected confirmWinner(fight: Fight, winnerId: string): void {
-    if (!this.canOperate() || this.confirmingWinner()) return;
+    if (!this.canOperateLive() || this.confirmingWinner()) return;
     this.winnerConfirmation.set({
       fight,
       winnerId,
@@ -782,7 +782,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected confirmDraw(fight: Fight): void {
-    if (!this.canOperate() || this.confirmingWinner()) return;
+    if (!this.canOperateLive() || this.confirmingWinner()) return;
     this.winnerConfirmation.set({
       fight,
       winnerId: null,
@@ -799,7 +799,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected confirmWinnerAndLoadNext(): void {
-    if (!this.canOperate() || this.confirmingWinner()) return;
+    if (!this.canOperateLive() || this.confirmingWinner()) return;
     const tid = this.context.tournamentId();
     const confirmation = this.winnerConfirmation();
     if (!tid || !confirmation) return;
