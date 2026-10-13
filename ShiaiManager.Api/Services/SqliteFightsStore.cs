@@ -50,7 +50,8 @@ public sealed class SqliteFightsStore : IFightsStore
             .FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
         if (record is null) return null;
 
-        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, [record.CategoryId], cancellationToken);
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
+            _dbContext, record.CategoryId is { } categoryId ? [categoryId] : [], cancellationToken);
         return MapToModel(record) with { Series = BestOfThreeSeries.DescribeOrNull(record, seriesBouts) };
     }
 
@@ -92,5 +93,6 @@ public sealed class SqliteFightsStore : IFightsStore
             r.CompletedAtUtc,
             r.CreatedAtUtc,
             r.UpdatedAtUtc,
-            IsGoldenScore: false);
+            IsGoldenScore: false,
+            FreeFight: FreeFightRules.DescribeOrNull(r));
 }

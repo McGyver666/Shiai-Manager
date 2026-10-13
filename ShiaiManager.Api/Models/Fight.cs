@@ -5,7 +5,7 @@ namespace ShiaiManager.Api.Models;
 /// </summary>
 /// <param name="Id">Unique fight identifier.</param>
 /// <param name="TournamentId">Owning tournament identifier.</param>
-/// <param name="CategoryId">Category this fight belongs to.</param>
+/// <param name="CategoryId">Category this fight belongs to; null for a Freikampf.</param>
 /// <param name="BracketType">Whether this is a main-bracket or repechage fight.</param>
 /// <param name="Round">Round number (1 = first round, highest = final).</param>
 /// <param name="FightNumber">1-based position within the round.</param>
@@ -46,10 +46,11 @@ namespace ShiaiManager.Api.Models;
 /// and the elapsed fight time has exceeded the regular match duration.
 /// </param>
 /// <param name="Series">Position and Serienstand within a Kampfserie; null for fights outside a series.</param>
+/// <param name="FreeFight">Freikampf data; null for regular fights.</param>
 public sealed record Fight(
     Guid Id,
     Guid TournamentId,
-    Guid CategoryId,
+    Guid? CategoryId,
     FightBracketType BracketType,
     int Round,
     int FightNumber,
@@ -85,4 +86,5 @@ public sealed record Fight(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
     bool IsGoldenScore,
-    FightSeries? Series = null);
+    FightSeries? Series = null,
+    FreeFightDetails? FreeFight = null);

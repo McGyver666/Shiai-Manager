@@ -24,6 +24,7 @@ public sealed class RankingService : IRankingService
     private static readonly string RepechageType = FightBracketType.Repechage.ToString();
     private static readonly string GroupStageType = FightBracketType.GroupStage.ToString();
     private static readonly string CompletedStatus = FightStatus.Completed.ToString();
+    private static readonly string RegularKind = FreeFightRules.RegularKind;
 
     /// <summary>Initializes a new service instance.</summary>
     public RankingService(AppDbContext dbContext)
@@ -502,7 +503,7 @@ public sealed class RankingService : IRankingService
 
         var fights = await _dbContext.Fights
             .AsNoTracking()
-            .Where(f => f.TournamentId == tournamentId && !f.IsBye)
+            .Where(f => f.TournamentId == tournamentId && f.Kind == RegularKind && !f.IsBye)
             .ToListAsync(cancellationToken);
 
         var plannedByAgeGroup = ageGroups.ToDictionary(age => age, _ => 0);
@@ -512,7 +513,7 @@ public sealed class RankingService : IRankingService
 
         foreach (var fight in fights)
         {
-            if (!categoryById.TryGetValue(fight.CategoryId, out var ageGroup))
+            if (fight.CategoryId is not { } categoryId || !categoryById.TryGetValue(categoryId, out var ageGroup))
             {
                 continue;
             }
@@ -619,7 +620,7 @@ public sealed class RankingService : IRankingService
 
         var fights = await _dbContext.Fights
             .AsNoTracking()
-            .Where(f => f.TournamentId == tournamentId && !f.IsBye)
+            .Where(f => f.TournamentId == tournamentId && f.Kind == RegularKind && !f.IsBye)
             .ToListAsync(cancellationToken);
 
         var wins = new Dictionary<Guid, int>();

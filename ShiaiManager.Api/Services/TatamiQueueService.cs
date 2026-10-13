@@ -42,7 +42,7 @@ public sealed class TatamiQueueService : ITatamiQueueService
             .ToListAsync(cancellationToken);
 
         var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
-            _dbContext, records.Select(f => f.CategoryId), cancellationToken);
+            _dbContext, records.Select(f => f.CategoryId).OfType<Guid>(), cancellationToken);
 
         Fight Map(FightRecord r) => MapToModel(r) with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) };
 
@@ -75,8 +75,7 @@ public sealed class TatamiQueueService : ITatamiQueueService
     private static bool IsReadyToStart(FightRecord f) =>
         f.Status == Pending
         && !f.IsBye
-        && f.WhiteAthleteId is not null
-        && f.BlueAthleteId is not null;
+        && TatamiQueueRules.HasBothSides(f);
 
     private static Fight MapToModel(FightRecord r) =>
         new(r.Id,
@@ -116,5 +115,6 @@ public sealed class TatamiQueueService : ITatamiQueueService
             r.CompletedAtUtc,
             r.CreatedAtUtc,
             r.UpdatedAtUtc,
-            IsGoldenScore: GoldenScoreRules.IsActive(r, r.Category, DateTimeOffset.UtcNow));
+            IsGoldenScore: GoldenScoreRules.IsActive(r, r.Category, DateTimeOffset.UtcNow),
+            FreeFight: FreeFightRules.DescribeOrNull(r));
 }

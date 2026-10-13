@@ -321,8 +321,13 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
             (HttpMethod.Post, $"{fight}/osae-komi/pause", null),
             (HttpMethod.Post, $"{fight}/osae-komi/resume", null),
             (HttpMethod.Post, $"{fight}/result", JsonContent.Create(new { WinnerId = Guid.NewGuid() })),
+            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/tatamis/{Guid.NewGuid()}/free-fights", JsonContent.Create(FreeFightBody)),
+            (HttpMethod.Put, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", JsonContent.Create(FreeFightBody)),
+            (HttpMethod.Delete, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", null),
         ];
     }
+
+    private static readonly object FreeFightBody = new { White = new { Name = "Weiß" }, Blue = new { Name = "Blau" } };
 
     [Theory]
     [InlineData("Admin", "admin-regression", "Admin!123456")]

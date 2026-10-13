@@ -28,6 +28,8 @@ public sealed class MatchService : IMatchService
     private static readonly string Paused = FightStatus.Paused.ToString();
     private static readonly string Completed = FightStatus.Completed.ToString();
     private const int HansokuMakeShidoCount = 3;
+    private const string WhiteSide = "White";
+    private const string BlueSide = "Blue";
 
     /// <summary>Initializes a new service instance.</summary>
     public MatchService(
@@ -161,20 +163,11 @@ public sealed class MatchService : IMatchService
         if (fight.Status != Pending || fight.TatamiId is null) return MatchActionResult.InvalidState;
 
         // Load the pending fights on this tatami in their current display order.
-        var pending = await _dbContext.Fights
-            .Where(f => f.TournamentId == fight.TournamentId
-                && f.TatamiId == fight.TatamiId
-                && f.Status == Pending
-                && !f.IsBye
-                && f.WhiteAthleteId != null
-                && f.BlueAthleteId != null)
+        var pending = await TatamiQueueRules
+            .ReadyPending(_dbContext.Fights, fight.TournamentId, fight.TatamiId.Value)
             .ToListAsync(cancellationToken);
 
-        var ordered = pending
-            .OrderBy(f => f.QueueOrder ?? int.MaxValue)
-            .ThenBy(f => f.Round)
-            .ThenBy(f => f.FightNumber)
-            .ToList();
+        var ordered = TatamiQueueRules.InQueueOrder(pending);
 
         var index = ordered.FindIndex(f => f.Id == fight.Id);
         if (index < 0) return MatchActionResult.InvalidState;
@@ -186,18 +179,8 @@ public sealed class MatchService : IMatchService
             return MatchActionResult.Success;
         }
 
-        // Swap positions and normalize QueueOrder sequentially so the order is stable and gap-free.
         (ordered[index], ordered[targetIndex]) = (ordered[targetIndex], ordered[index]);
-
-        var now = DateTimeOffset.UtcNow;
-        for (var i = 0; i < ordered.Count; i++)
-        {
-            if (ordered[i].QueueOrder != i)
-            {
-                ordered[i].QueueOrder = i;
-                ordered[i].UpdatedAtUtc = now;
-            }
-        }
+        TatamiQueueRules.Renumber(ordered, DateTimeOffset.UtcNow);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -218,8 +201,7 @@ public sealed class MatchService : IMatchService
             user,
             async (fight, ct) =>
             {
-                if (fight.IsBye || fight.Status != Pending
-                    || fight.WhiteAthleteId is null || fight.BlueAthleteId is null)
+                if (fight.IsBye || fight.Status != Pending || !TatamiQueueRules.HasBothSides(fight))
                 {
                     return MatchActionResult.InvalidState;
                 }
@@ -485,6 +467,19 @@ public sealed class MatchService : IMatchService
         if (fight is null) return MatchActionResult.FightNotFound;
 
         if (fight.Status != InProgress && fight.Status != Paused) return MatchActionResult.InvalidState;
+
+        if (FreeFightRules.IsFree(fight))
+        {
+            var side = winnerId is null ? null
+                : winnerId == fight.WhiteAthleteId ? WhiteSide
+                : winnerId == fight.BlueAthleteId ? BlueSide
+                : null;
+            if (winnerId is not null && side is null) return MatchActionResult.WinnerNotParticipant;
+            return await CompleteFreeFightAsync(fight, side, user, cancellationToken);
+        }
+
+        if (fight.CategoryId is not { } categoryId) return MatchActionResult.InvalidState;
+
         if (winnerId is null)
         {
             var isTeamMatchday = await _dbContext.Tournaments
@@ -500,18 +495,11 @@ public sealed class MatchService : IMatchService
 
         var now = DateTimeOffset.UtcNow;
         fight.WinnerId = winnerId;
-        fight.Status = Completed;
-        fight.CompletedAtUtc = now;
-        fight.PausedAtUtc = null;
-        fight.OsaeKomiSide = null;
-        fight.OsaeKomiStartedAtUtc = null;
-        fight.OsaeKomiPausedAtUtc = null;
-        fight.OsaeKomiElapsedMilliseconds = 0;
-        fight.UpdatedAtUtc = now;
+        MarkCompleted(fight, now);
 
         await UpdateAthletesLastFightMetadataAsync(fight, now, cancellationToken);
 
-        await RecalculateProgressionAsync(fight.CategoryId, cancellationToken);
+        await RecalculateProgressionAsync(categoryId, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _auditLog.LogAsync(
@@ -520,14 +508,74 @@ public sealed class MatchService : IMatchService
 
         _ = _hub.Clients.Group(fight.TournamentId.ToString())
             .SendAsync("CategoryFightsUpdated",
-                new { tournamentId = fight.TournamentId, categoryId = fight.CategoryId },
+                new { tournamentId = fight.TournamentId, categoryId },
                 CancellationToken.None);
 
         // Auto-generate knockout bracket when all group-stage fights are done
-        await TryAutoGenerateKnockoutAsync(fight.CategoryId, fight.TournamentId, cancellationToken);
+        await TryAutoGenerateKnockoutAsync(categoryId, fight.TournamentId, cancellationToken);
 
         _logger.LogInformation("Fight {FightId} confirmed, winner {WinnerId}.", fightId, winnerId);
         return MatchActionResult.Success;
+    }
+
+    /// <inheritdoc />
+    public async Task<MatchActionResult> ConfirmResultBySideAsync(
+        Guid fightId,
+        string? winnerSide,
+        string user,
+        CancellationToken cancellationToken)
+    {
+        var fight = await _dbContext.Fights.FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
+        if (fight is null) return MatchActionResult.FightNotFound;
+        if (!FreeFightRules.IsFree(fight)) return MatchActionResult.InvalidState;
+        if (fight.Status != InProgress && fight.Status != Paused) return MatchActionResult.InvalidState;
+
+        string? side = null;
+        if (winnerSide is not null)
+        {
+            if (!TryGetSide(winnerSide, out var whiteWins)) return MatchActionResult.WinnerNotParticipant;
+            side = whiteWins ? WhiteSide : BlueSide;
+        }
+
+        return await CompleteFreeFightAsync(fight, side, user, cancellationToken);
+    }
+
+    /// <summary>
+    /// Completes a Freikampf with a winning side (null = Hikiwake). It touches no category, bracket or
+    /// ranking; only the athletes' last-fight metadata is updated (ADR-0013).
+    /// </summary>
+    private async Task<MatchActionResult> CompleteFreeFightAsync(
+        FightRecord fight,
+        string? winnerSide,
+        string user,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        fight.WinnerSide = winnerSide;
+        MarkCompleted(fight, now);
+
+        await UpdateAthletesLastFightMetadataAsync(fight, now, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _auditLog.LogAsync(
+            fight.TournamentId, user, "ResultConfirmed", "Fight", fight.Id,
+            $"WinnerSide={winnerSide ?? "Hikiwake"}; Score={fight.WhiteScore}:{fight.BlueScore}", cancellationToken);
+        await BroadcastFightsUpdatedAsync([fight], cancellationToken);
+
+        _logger.LogInformation("Freikampf {FightId} confirmed, winning side {WinnerSide}.", fight.Id, winnerSide ?? "Hikiwake");
+        return MatchActionResult.Success;
+    }
+
+    private static void MarkCompleted(FightRecord fight, DateTimeOffset now)
+    {
+        fight.Status = Completed;
+        fight.CompletedAtUtc = now;
+        fight.PausedAtUtc = null;
+        fight.OsaeKomiSide = null;
+        fight.OsaeKomiStartedAtUtc = null;
+        fight.OsaeKomiPausedAtUtc = null;
+        fight.OsaeKomiElapsedMilliseconds = 0;
+        fight.UpdatedAtUtc = now;
     }
 
     /// <inheritdoc />
@@ -540,8 +588,9 @@ public sealed class MatchService : IMatchService
         var fight = await _dbContext.Fights.FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
         if (fight is null) return new(EditResultStatus.FightNotFound);
 
-        // Group-stage fights are excluded from the edit-result feature (Q10).
-        if (fight.Status != Completed || fight.IsBye || fight.BracketType == GroupStageType)
+        // Group-stage fights are excluded from the edit-result feature (Q10); Freikämpfe cannot be corrected (ADR-0013).
+        if (fight.Status != Completed || fight.IsBye || fight.BracketType == GroupStageType
+            || fight.CategoryId is not { } categoryId)
             return new(EditResultStatus.InvalidState);
 
         if (request.WinnerId != fight.WhiteAthleteId && request.WinnerId != fight.BlueAthleteId)
@@ -580,7 +629,7 @@ public sealed class MatchService : IMatchService
         if (winnerChanges)
         {
             resetCount = await ResetAffectedStartedFightsAsync(fight, cancellationToken);
-            removedDecidingFight = await RecalculateProgressionAsync(fight.CategoryId, cancellationToken);
+            removedDecidingFight = await RecalculateProgressionAsync(categoryId, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -912,7 +961,7 @@ public sealed class MatchService : IMatchService
             var second = bouts.Single(f => f.Round == 2);
             _dbContext.Fights.Add(BestOfThreeSeries.CreateBout(
                 second.TournamentId,
-                second.CategoryId,
+                second.CategoryId!.Value,
                 BestOfThreeSeries.DecidingRound,
                 second.WhiteAthleteId,
                 second.BlueAthleteId,
@@ -1068,8 +1117,8 @@ public sealed class MatchService : IMatchService
         CancellationToken cancellationToken)
     {
         var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
-            _dbContext, fights.Select(f => f.CategoryId), cancellationToken);
-        var categoryIds = fights.Select(f => f.CategoryId).Distinct().ToList();
+            _dbContext, fights.Select(f => f.CategoryId).OfType<Guid>(), cancellationToken);
+        var categoryIds = fights.Select(f => f.CategoryId).OfType<Guid>().Distinct().ToList();
         var categories = await _dbContext.Categories
             .AsNoTracking()
             .Where(c => categoryIds.Contains(c.Id))
@@ -1078,7 +1127,8 @@ public sealed class MatchService : IMatchService
 
         foreach (var fight in fights)
         {
-            var isGoldenScore = GoldenScoreRules.IsActive(fight, categories.GetValueOrDefault(fight.CategoryId), now);
+            var category = fight.CategoryId is { } categoryId ? categories.GetValueOrDefault(categoryId) : null;
+            var isGoldenScore = GoldenScoreRules.IsActive(fight, category, now);
             await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
                 "FightUpdated",
                 new FightUpdatedMessage(
@@ -1155,7 +1205,8 @@ public sealed class MatchService : IMatchService
         r.OsaeKomiElapsedMilliseconds,
         r.StartedAtUtc, r.CompletedAtUtc,
         r.CreatedAtUtc, r.UpdatedAtUtc,
-        IsGoldenScore: false);
+        IsGoldenScore: false,
+        FreeFight: FreeFightRules.DescribeOrNull(r));
 
     private static bool TryGetSide(string side, out bool whiteSide)
     {

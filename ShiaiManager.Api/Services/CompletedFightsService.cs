@@ -14,6 +14,7 @@ public sealed class CompletedFightsService : ICompletedFightsService
     private readonly AppDbContext _dbContext;
 
     private static readonly string CompletedStatus = FightStatus.Completed.ToString();
+    private static readonly string RegularKind = FreeFightRules.RegularKind;
     private const string UnknownName = "—";
 
     /// <summary>Initializes a new service instance.</summary>
@@ -31,6 +32,7 @@ public sealed class CompletedFightsService : ICompletedFightsService
         var completedFights = await _dbContext.Fights
             .AsNoTracking()
             .Where(f => f.TournamentId == tournamentId
+                        && f.Kind == RegularKind
                         && f.Status == CompletedStatus
                         && !f.IsBye)
             .ToListAsync(cancellationToken);
@@ -66,7 +68,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
             .Select(c => new { c.Id, c.Name })
             .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
 
-        var categoryIds = fights.Select(f => f.CategoryId).Distinct().ToHashSet();
+        // Regular fights always belong to a category; Freikämpfe were filtered out above.
+        var categoryIds = fights.Select(f => f.CategoryId!.Value).Distinct().ToHashSet();
         var categoryNames = await _dbContext.Categories
             .AsNoTracking()
             .Where(c => categoryIds.Contains(c.Id))
@@ -137,8 +140,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
         return fights
             .Select(f => new CompletedFightSummary(
                 f.Id,
-                f.CategoryId,
-                categoryNames.TryGetValue(f.CategoryId, out var catName) ? catName : UnknownName,
+                f.CategoryId!.Value,
+                categoryNames.TryGetValue(f.CategoryId.Value, out var catName) ? catName : UnknownName,
                 f.BracketType,
                 f.Round,
                 f.FightNumber,

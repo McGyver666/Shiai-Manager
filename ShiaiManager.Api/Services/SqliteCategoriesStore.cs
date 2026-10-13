@@ -192,8 +192,8 @@ public sealed class SqliteCategoriesStore : ICategoriesStore
     {
         var ids = await _dbContext.Fights
             .AsNoTracking()
-            .Where(x => x.TournamentId == tournamentId)
-            .Select(x => x.CategoryId)
+            .Where(x => x.TournamentId == tournamentId && x.CategoryId != null)
+            .Select(x => x.CategoryId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -216,7 +216,7 @@ public sealed class SqliteCategoriesStore : ICategoriesStore
             .Where(x => x.TournamentId == tournamentId && categoryIdsToDelete.Contains(x.Id))
             .ToListAsync(cancellationToken);
         var hasFights = await _dbContext.Fights
-            .AnyAsync(x => categoryIdsToDelete.Contains(x.CategoryId), cancellationToken);
+            .AnyAsync(x => x.CategoryId != null && categoryIdsToDelete.Contains(x.CategoryId.Value), cancellationToken);
         if (hasFights || recordsToDelete.Any(x => x.IsLocked || x.DrawFormat is not null))
         {
             _logger.LogWarning(

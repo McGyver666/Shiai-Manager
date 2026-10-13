@@ -112,6 +112,71 @@ public sealed class MatchClockEvaluatorTests
             .Select(i => (FightUpdatedMessage)((object[])i.Arguments[1])[0])
             .ToList();
 
+    private static async Task<List<FightUpdatedMessage>> EvaluateRunningFreikampfAsync(
+        int elapsedSeconds, int matchDurationSeconds, bool goldenScoreEnabled)
+    {
+        var dbPath = CreateDatabasePath();
+        await using (var provider = BuildProvider(dbPath))
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await context.Database.EnsureCreatedAsync();
+            var tournamentId = Guid.NewGuid();
+            context.Tournaments.Add(new TournamentRecord
+            {
+                Id = tournamentId, Name = "Test", Date = new DateOnly(2026, 7, 23), Venue = "Essen", Organizer = "JV",
+                CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow,
+            });
+            context.Fights.Add(new FightRecord
+            {
+                Id = Guid.NewGuid(), TournamentId = tournamentId, Kind = nameof(FightKind.Free), CategoryId = null,
+                BracketType = "Main", WhiteName = "Weiß", BlueName = "Blau", Status = "InProgress",
+                MatchDurationSeconds = matchDurationSeconds, GoldenScoreEnabled = goldenScoreEnabled,
+                GoldenScoreDurationSeconds = 60,
+                StartedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-elapsedSeconds),
+                CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow,
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var proxy = new Mock<IClientProxy>();
+        await using (var provider = BuildProvider(dbPath, proxy))
+        {
+            var evaluator = new MatchClockEvaluator(provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<MatchClockEvaluator>.Instance);
+            await evaluator.EvaluateOnceAsync(CancellationToken.None);
+        }
+
+        return FightUpdates(proxy);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_FreikampfBeforeItsOwnFightTime_DoesNotPause()
+    {
+        Assert.Empty(await EvaluateRunningFreikampfAsync(elapsedSeconds: 5, matchDurationSeconds: 10, goldenScoreEnabled: false));
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_FreikampfAfterItsOwnFightTime_Pauses()
+    {
+        var update = Assert.Single(await EvaluateRunningFreikampfAsync(elapsedSeconds: 5, matchDurationSeconds: 3, goldenScoreEnabled: false));
+
+        Assert.Equal(FightStatus.Paused, update.Fight.Status);
+        Assert.False(update.Fight.IsGoldenScore);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_TiedFreikampfWithGoldenScore_EntersGoldenScore()
+    {
+        var update = Assert.Single(await EvaluateRunningFreikampfAsync(elapsedSeconds: 5, matchDurationSeconds: 3, goldenScoreEnabled: true));
+
+        Assert.Equal(FightStatus.InProgress, update.Fight.Status);
+        Assert.True(update.Fight.IsGoldenScore);
+        Assert.NotNull(update.Fight.FreeFight);
+    }
+
     [Fact]
     [Trait("Category", "UnitTest")]
     public async Task EvaluateOnceAsync_TiedFightEntersGoldenScore_BroadcastsGoldenScoreOnce()

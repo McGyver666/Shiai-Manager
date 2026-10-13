@@ -13,8 +13,11 @@ public sealed class FightRecord
     /// <summary>Owning tournament.</summary>
     public Guid TournamentId { get; set; }
 
-    /// <summary>Category this fight belongs to.</summary>
-    public Guid CategoryId { get; set; }
+    /// <summary>Fight kind stored as <see cref="Models.FightKind"/> member name.</summary>
+    public string Kind { get; set; } = nameof(Models.FightKind.Regular);
+
+    /// <summary>Category this fight belongs to; null for a Freikampf (ADR-0013).</summary>
+    public Guid? CategoryId { get; set; }
 
     /// <summary>Bracket type stored as enum member name ("Main" or "Repechage").</summary>
     public string BracketType { get; set; } = string.Empty;
@@ -48,6 +51,24 @@ public sealed class FightRecord
 
     /// <summary>Winner of this fight; null until the fight is completed.</summary>
     public Guid? WinnerId { get; set; }
+
+    /// <summary>Free-text name of the White side of a Freikampf; null when an athlete is selected.</summary>
+    public string? WhiteName { get; set; }
+
+    /// <summary>Free-text name of the Blue side of a Freikampf; null when an athlete is selected.</summary>
+    public string? BlueName { get; set; }
+
+    /// <summary>Regular fight time of a Freikampf in seconds; null for regular fights.</summary>
+    public int? MatchDurationSeconds { get; set; }
+
+    /// <summary>Whether a Freikampf has golden score; null for regular fights.</summary>
+    public bool? GoldenScoreEnabled { get; set; }
+
+    /// <summary>Golden score duration of a Freikampf in seconds; null for regular fights.</summary>
+    public int? GoldenScoreDurationSeconds { get; set; }
+
+    /// <summary>Winning side of a Freikampf ("White" or "Blue"); null until completed or for Hikiwake.</summary>
+    public string? WinnerSide { get; set; }
 
     /// <summary>True when one slot is a bye; the other athlete auto-advances.</summary>
     public bool IsBye { get; set; }

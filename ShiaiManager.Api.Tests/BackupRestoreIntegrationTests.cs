@@ -312,6 +312,45 @@ public sealed class BackupRestoreIntegrationTests : IClassFixture<BackupRestoreI
         Assert.Contains(presets!, preset => preset.AgeGroup == "Männer");
     }
 
+    [Fact]
+    public async Task BackupAndRestore_RoundTripFreikampf()
+    {
+        using var client = _factory.CreateClient();
+        var adminToken = await EnsureAdminAndGetTokenAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var now = DateTimeOffset.UtcNow;
+        var tournamentId = Guid.NewGuid();
+        var freeFight = new FightRecord
+        {
+            Id = Guid.NewGuid(), TournamentId = tournamentId, Kind = nameof(Models.FightKind.Free), CategoryId = null,
+            BracketType = "Main", Status = "Completed", WhiteName = "Gast 1", BlueName = "Gast 2",
+            MatchDurationSeconds = 150, GoldenScoreEnabled = true, GoldenScoreDurationSeconds = 90, WinnerSide = "Blue",
+            StartedAtUtc = now.AddMinutes(-3), CompletedAtUtc = now, CreatedAtUtc = now, UpdatedAtUtc = now
+        };
+        var backup = new TournamentBackup
+        {
+            Version = "1.0",
+            ExportedAtUtc = now,
+            Tournament = new TournamentRecord
+            {
+                Id = tournamentId, Name = "Freikampf-Backup", Date = new DateOnly(2026, 10, 13),
+                Venue = "Testort", Organizer = "Testveranstalter", CreatedAtUtc = now, UpdatedAtUtc = now
+            },
+            Fights = [freeFight]
+        };
+
+        var restoreResponse = await client.PostAsJsonAsync("/api/tournaments/restore", backup);
+        Assert.Equal(HttpStatusCode.Created, restoreResponse.StatusCode);
+
+        var exported = await client.GetFromJsonAsync<TournamentBackup>($"/api/tournaments/{tournamentId}/backup");
+        var restored = Assert.Single(exported!.Fights);
+        Assert.Equal(
+            (freeFight.Kind, freeFight.CategoryId, freeFight.WhiteName, freeFight.BlueName, freeFight.MatchDurationSeconds,
+                freeFight.GoldenScoreEnabled, freeFight.GoldenScoreDurationSeconds, freeFight.WinnerSide),
+            (restored.Kind, restored.CategoryId, restored.WhiteName, restored.BlueName, restored.MatchDurationSeconds,
+                restored.GoldenScoreEnabled, restored.GoldenScoreDurationSeconds, restored.WinnerSide));
+    }
+
     private static async Task<string> EnsureAdminAndGetTokenAsync(HttpClient client)
     {
         var bootstrapResponse = await client.PostAsJsonAsync("/api/auth/bootstrap-admin", new BootstrapAdminRequest

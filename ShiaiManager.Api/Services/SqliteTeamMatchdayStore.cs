@@ -359,8 +359,8 @@ public sealed class SqliteTeamMatchdayStore : ITeamMatchdayStore
 
         var categories = await EnsureProfileCategoriesAsync(tournamentId, ruleProfile, cancellationToken);
         var nextFightNumbers = await _dbContext.Fights
-            .Where(x => categories.Values.Contains(x.CategoryId))
-            .GroupBy(x => x.CategoryId)
+            .Where(x => x.CategoryId != null && categories.Values.Contains(x.CategoryId.Value))
+            .GroupBy(x => x.CategoryId!.Value)
             .ToDictionaryAsync(x => x.Key, x => x.Max(y => y.FightNumber), cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var records = new List<EncounterBoutRecord>(order.Count);

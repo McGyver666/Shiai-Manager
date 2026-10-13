@@ -729,10 +729,64 @@ public sealed class RankingServiceTests
         Assert.Equal(0m, clubDEntry.ScoreRaw);
     }
 
-    // ─── Round-robin standings tests ──────────────────────────────────────────
+    [Fact]
+    public async Task ClubScoring_IgnoresFreikaempfe_EvenWhenAnAthleteWithClubWins()
+    {
+        await using var ctx = CreateDbContext();
+        var svc = CreateService(ctx);
+        var (tid, cid, _, athleteIds) = await SeedAsync(ctx, 2);
+        var now = DateTimeOffset.UtcNow;
+
+        ctx.Fights.Add(new FightRecord
+        {
+            Id = Guid.NewGuid(), TournamentId = tid, CategoryId = cid,
+            Round = 1, FightNumber = 1, BracketType = FightBracketType.Main.ToString(),
+            Status = FightStatus.Completed.ToString(),
+            WhiteAthleteId = athleteIds[0], BlueAthleteId = athleteIds[1], WinnerId = athleteIds[0],
+            CreatedAtUtc = now, UpdatedAtUtc = now,
+        });
+        await ctx.SaveChangesAsync();
+
+        var ageGroupBefore = await svc.GetAgeGroupClubScoringAsync(tid, CancellationToken.None);
+        var globalBefore = await svc.GetGlobalClubScoringAsync(tid, CancellationToken.None);
+        var rankingsBefore = await svc.GetCategoryRankingsAsync(tid, cid, CancellationToken.None);
+        var medalsBefore = await svc.GetMedalTableAsync(tid, CancellationToken.None);
+
+        // A completed Freikampf won by the loser and a pending one, both with club athletes.
+        ctx.Fights.AddRange(
+            new FightRecord
+            {
+                Id = Guid.NewGuid(), TournamentId = tid, CategoryId = null, Kind = nameof(FightKind.Free),
+                BracketType = FightBracketType.Main.ToString(), Status = FightStatus.Completed.ToString(),
+                WhiteAthleteId = athleteIds[0], BlueAthleteId = athleteIds[1],
+                WinnerId = athleteIds[1], WinnerSide = "Blue",
+                CreatedAtUtc = now, UpdatedAtUtc = now,
+            },
+            new FightRecord
+            {
+                Id = Guid.NewGuid(), TournamentId = tid, CategoryId = null, Kind = nameof(FightKind.Free),
+                BracketType = FightBracketType.Main.ToString(), Status = FightStatus.Pending.ToString(),
+                WhiteAthleteId = athleteIds[1], BlueName = "Gast",
+                CreatedAtUtc = now, UpdatedAtUtc = now,
+            });
+        await ctx.SaveChangesAsync();
+
+        var ageGroupAfter = await svc.GetAgeGroupClubScoringAsync(tid, CancellationToken.None);
+        var globalAfter = await svc.GetGlobalClubScoringAsync(tid, CancellationToken.None);
+        var rankingsAfter = await svc.GetCategoryRankingsAsync(tid, cid, CancellationToken.None);
+        var medalsAfter = await svc.GetMedalTableAsync(tid, CancellationToken.None);
+
+        Assert.Equivalent(ageGroupBefore.Items, ageGroupAfter.Items, strict: true);
+        Assert.Equal(globalBefore.Status, globalAfter.Status);
+        Assert.Equivalent(globalBefore.Clubs, globalAfter.Clubs, strict: true);
+        Assert.Equivalent(rankingsBefore, rankingsAfter, strict: true);
+        Assert.Equivalent(medalsBefore, medalsAfter, strict: true);
+    }
 
     private static FightRecord MakeRRFight(
         Guid tournamentId, Guid categoryId,
+    // ─── Round-robin standings tests ──────────────────────────────────────────
+
         Guid red, Guid blue,
         Guid winner,
         int redWazaAri = 0, int blueWazaAri = 0,
