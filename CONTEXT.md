@@ -115,14 +115,16 @@ Use these terms as-is (German primary) in issues, tests, and code names; don't d
   two wins takes the series. _Avoid_: Paarung, Matchup, Duell, Begegnung.
 - **Entscheidungskampf** (Deciding fight) — the third Kampf of a Kampfserie, only held at 1:1.
 - **Serienstand** (Series score) — the running count of won Kämpfe per athlete in a Kampfserie.
-- **Tatami** — a mat/fight area. Fights are queued and assigned per tatami.
+- **Tatami** — a mat/fight area. Fights are queued and assigned per tatami. A started fight stays on
+  its tatami; only not-yet-started fights can be moved to another tatami.
 - **Kampf** (Fight) — a single bout. **Freilos** = a bye (does not count as a fight).
 - **Osae-komi** — hold-down; server-authoritative timing with Sono-mama/Yoshi pause and resume that freezes both hold and fight clocks.
 - **Hansoku-make** — disqualification from the bout. Currently derived from the 3rd **Shido** (penalty):
   the opponent automatically receives an Ippon; fight status and osae-komi are not changed and the
   winner is still confirmed manually. Direct Hansoku-make and the IJF double-Hansoku-make rule are not
   modelled yet.
-- **Golden Score** — sudden-death extension.
+- **Golden Score** — sudden-death extension. Starts when the regular time of a tied fight runs out;
+  the server announces the transition to all clients.
 - **Vereinswertung** (Club scoring) — team ranking per age group and globally. See
   [ADR-0007](docs/adr/0007-club-scoring-rules.md) for the exact rules.
 - **Siegquote** (Win ratio) — won fights / contested fights; byes excluded; `0/0 = 0.0`.

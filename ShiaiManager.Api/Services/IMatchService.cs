@@ -29,6 +29,7 @@ public interface IMatchService
 {
     /// <summary>
     /// Assigns a fight to a tatami (or clears the assignment when <paramref name="tatamiId"/> is null).
+    /// Returns <see cref="MatchActionResult.InvalidState"/> when a started (non-pending) fight would change its tatami.
     /// </summary>
     Task<MatchActionResult> AssignTatamiAsync(
         Guid fightId,
@@ -40,6 +41,7 @@ public interface IMatchService
     /// Assigns many fights to tatamis in a single atomic operation (one database transaction).
     /// Fights whose athletes are not yet known are included; already correctly assigned fights are skipped.
     /// This avoids the concurrent-write contention that occurs when assigning one fight per request in parallel.
+    /// Returns <see cref="MatchActionResult.InvalidState"/> without changing anything when a started fight would change its tatami.
     /// </summary>
     Task<MatchActionResult> AssignTatamiBulkAsync(
         Guid tournamentId,
@@ -74,6 +76,12 @@ public interface IMatchService
     /// Starts a pending fight. Both athletes must be assigned and the fight must not be a bye.
     /// </summary>
     Task<MatchActionResult> StartAsync(Guid fightId, string user, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Broadcasts the fight's current state without changing it, for clock transitions that no
+    /// mutation announces (e.g. a tied fight entering golden score).
+    /// </summary>
+    Task<MatchActionResult> NotifyFightUpdatedAsync(Guid fightId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Pauses an in-progress fight.

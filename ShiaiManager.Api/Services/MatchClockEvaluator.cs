@@ -15,6 +15,8 @@ public sealed class MatchClockEvaluator : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MatchClockEvaluator> _logger;
+    // Running fights whose golden-score start was already broadcast; evaluation cycles run sequentially.
+    private readonly HashSet<Guid> _goldenScoreAnnounced = [];
 
     /// <summary>
     /// Initializes a new hosted evaluator.
@@ -43,6 +45,8 @@ public sealed class MatchClockEvaluator : BackgroundService
             .Include(f => f.Tournament)
             .Where(f => f.Status == InProgress && f.StartedAtUtc != null)
             .ToListAsync(cancellationToken);
+
+        _goldenScoreAnnounced.IntersectWith(fights.Select(f => f.Id));
 
         foreach (var fight in fights)
         {
@@ -102,7 +106,7 @@ public sealed class MatchClockEvaluator : BackgroundService
         return result == MatchActionResult.Success;
     }
 
-    private static async Task TryPauseFightAsync(
+    private async Task TryPauseFightAsync(
         IMatchService matchService,
         FightRecord fight,
         DateTimeOffset now,
@@ -127,20 +131,22 @@ public sealed class MatchClockEvaluator : BackgroundService
         }
 
         var timeLimitSeconds = regularDuration;
-        if (category.GoldenScoreEnabled && IsTiedForGoldenScore(fight))
+        if (category.GoldenScoreEnabled && GoldenScoreRules.IsTied(fight))
         {
             timeLimitSeconds += category.GoldenScoreDurationSeconds;
         }
 
         if (elapsedSeconds < timeLimitSeconds)
         {
+            // Entering golden score changes no stored field, so clients must be told explicitly.
+            if (GoldenScoreRules.IsActive(fight, category, now) && _goldenScoreAnnounced.Add(fight.Id))
+            {
+                await matchService.NotifyFightUpdatedAsync(fight.Id, cancellationToken);
+            }
+
             return;
         }
 
         _ = await matchService.PauseAsync(fight.Id, SystemUser, cancellationToken);
     }
-
-    private static bool IsTiedForGoldenScore(FightRecord fight) =>
-        fight.WhiteWazaAriCount == fight.BlueWazaAriCount
-        && fight.WhiteYukoCount == fight.BlueYukoCount;
 }

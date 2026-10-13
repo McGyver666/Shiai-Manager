@@ -838,4 +838,105 @@ describe('MatchComponent', () => {
 
     fixture.destroy();
   });
+
+  describe('fight clock robustness (#99)', () => {
+    const category240 = (): Category => ({
+      id: 'category-1',
+      tournamentId: 'tournament-1',
+      name: 'U18 -66',
+      ageGroup: 'U18',
+      gender: 'Male',
+      weightClassKg: 66,
+      minBirthYear: null,
+      maxBirthYear: null,
+      rulesetNotes: null,
+      matchDurationSeconds: 240,
+      goldenScoreEnabled: true,
+      goldenScoreDurationSeconds: 180,
+      drawFormat: 'SingleElimination',
+      isLocked: true,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
+    } as Category);
+
+    it('uses the category duration when categories arrive after the queue', () => {
+      const categories$ = new Subject<Category[]>();
+      (apiMock.getCategories as Mock).mockReturnValue(categories$.asObservable());
+      const queue$ = new Subject<TatamiQueue>();
+      getTatamiQueueSpy.mockReturnValue(queue$.asObservable());
+
+      const fixture = TestBed.createComponent(MatchComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance as any;
+
+      queue$.next(queueWith(pendingFight()));
+      fixture.detectChanges();
+      categories$.next([category240()]);
+      fixture.detectChanges();
+
+      expect(component.timerSeconds()).toBe(240);
+      fixture.destroy();
+    });
+
+    it('reloads categories when the current fight belongs to an unknown category', () => {
+      const getCategoriesSpy = apiMock.getCategories as Mock;
+      getCategoriesSpy.mockReturnValueOnce(of([] as Category[])).mockReturnValue(of([category240()]));
+      const queue$ = new Subject<TatamiQueue>();
+      getTatamiQueueSpy.mockReturnValue(queue$.asObservable());
+
+      const fixture = TestBed.createComponent(MatchComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance as any;
+
+      queue$.next(queueWith(pendingFight()));
+      fixture.detectChanges();
+
+      expect(getCategoriesSpy).toHaveBeenCalledTimes(2);
+      expect(component.timerSeconds()).toBe(240);
+      fixture.destroy();
+    });
+
+    it('switches a tied fight into golden score once the server announces it', () => {
+      const startedAtUtc = new Date(Date.now() - 250_000).toISOString();
+      const tied = (isGoldenScore: boolean) => createFight({
+        status: 'InProgress', completedAtUtc: null, whiteScore: 0, whiteIpponCount: 0, startedAtUtc, isGoldenScore,
+      });
+      const queue$ = new Subject<TatamiQueue>();
+      getTatamiQueueSpy.mockReturnValue(queue$.asObservable());
+
+      const fixture = TestBed.createComponent(MatchComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance as any;
+      queue$.next(queueWith(tied(false)));
+      expect(component.timerSeconds()).toBe(0);
+
+      fightUpdates.next(tied(true));
+      queue$.next(queueWith(tied(true)));
+
+      expect(component.timerIsGoldenScore()).toBe(true);
+      expect(component.timerSeconds()).toBeGreaterThan(160);
+      fixture.destroy();
+    });
+
+    it('does not carry a frozen osae-komi over to a different fight', () => {
+      const fixture = TestBed.createComponent(MatchComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance as any;
+      const startedAt = new Date('2026-09-04T10:00:00.000Z');
+
+      component.restartTimer(createFight({ status: 'InProgress', osaeKomiSide: 'White', osaeKomiStartedAtUtc: startedAt.toISOString() }));
+      component.restartTimer(createFight({ status: 'InProgress', updatedAtUtc: new Date(startedAt.getTime() + 5400).toISOString() }));
+      expect(component.holdTimerLabel()).toBe('5.4s / 20s');
+
+      component.restartTimer(createFight({ id: 'fight-other', status: 'InProgress', completedAtUtc: null }));
+      expect(component.holdTimerLabel()).toBe('--s');
+
+      component.restartTimer(createFight({ status: 'InProgress', osaeKomiSide: 'White', osaeKomiStartedAtUtc: startedAt.toISOString() }));
+      component.restartTimer(createFight({ status: 'InProgress', updatedAtUtc: new Date(startedAt.getTime() + 5400).toISOString() }));
+      component.restartTimer(pendingFight({ id: 'fight-next' }));
+      expect(component.holdTimerLabel()).toBe('--s');
+
+      fixture.destroy();
+    });
+  });
 });

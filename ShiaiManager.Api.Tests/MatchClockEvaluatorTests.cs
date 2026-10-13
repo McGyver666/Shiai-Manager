@@ -1,5 +1,6 @@
 using ShiaiManager.Api.Data;
 using ShiaiManager.Api.Hubs;
+using ShiaiManager.Api.Models;
 using ShiaiManager.Api.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,11 @@ public sealed class MatchClockEvaluatorTests
         return Path.Combine(dir, "clock-evaluator.db");
     }
 
-    private static ServiceProvider BuildProvider(string dbPath)
+    private static ServiceProvider BuildProvider(string dbPath, Mock<IClientProxy>? proxy = null)
     {
         var mockHub = new Mock<IHubContext<TournamentHub>>();
         var mockClients = new Mock<IHubClients>();
-        var mockProxy = new Mock<IClientProxy>();
+        var mockProxy = proxy ?? new Mock<IClientProxy>();
         mockHub.Setup(h => h.Clients).Returns(mockClients.Object);
         mockClients.Setup(c => c.Group(It.IsAny<string>())).Returns(mockProxy.Object);
         mockProxy.Setup(c => c.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), It.IsAny<CancellationToken>()))
@@ -44,6 +45,128 @@ public sealed class MatchClockEvaluatorTests
         context.Tournaments.Add(tournament);
         context.Categories.Add(category);
         await context.SaveChangesAsync();
+    }
+
+    private static async Task<Guid> SeedRunningFightAsync(
+        string dbPath, int elapsedSeconds, bool goldenScoreEnabled, int whiteWazaAri = 0)
+    {
+        await using var provider = BuildProvider(dbPath);
+        await using var scope = provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await context.Database.EnsureCreatedAsync();
+
+        var tournamentId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        await SeedBaseAsync(
+            context,
+            new TournamentRecord
+            {
+                Id = tournamentId,
+                Name = "Test",
+                Date = new DateOnly(2026, 7, 23),
+                Venue = "Essen",
+                Organizer = "JV",
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+                UpdatedAtUtc = DateTimeOffset.UtcNow,
+            },
+            new CategoryRecord
+            {
+                Id = categoryId,
+                TournamentId = tournamentId,
+                Name = "U18",
+                AgeGroup = "U18",
+                Gender = "Male",
+                MatchDurationSeconds = 2,
+                GoldenScoreEnabled = goldenScoreEnabled,
+                GoldenScoreDurationSeconds = 60,
+                IsLocked = true,
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+                UpdatedAtUtc = DateTimeOffset.UtcNow,
+            });
+
+        var fightId = Guid.NewGuid();
+        context.Fights.Add(new FightRecord
+        {
+            Id = fightId,
+            TournamentId = tournamentId,
+            CategoryId = categoryId,
+            BracketType = "Main",
+            Round = 1,
+            FightNumber = 1,
+            WhiteAthleteId = Guid.NewGuid(),
+            BlueAthleteId = Guid.NewGuid(),
+            Status = "InProgress",
+            StartedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-elapsedSeconds),
+            WhiteWazaAriCount = whiteWazaAri,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            UpdatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        await context.SaveChangesAsync();
+        return fightId;
+    }
+
+    private static List<FightUpdatedMessage> FightUpdates(Mock<IClientProxy> proxy) =>
+        proxy.Invocations
+            .Where(i => i.Method.Name == nameof(IClientProxy.SendCoreAsync) && (string)i.Arguments[0] == "FightUpdated")
+            .Select(i => (FightUpdatedMessage)((object[])i.Arguments[1])[0])
+            .ToList();
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_TiedFightEntersGoldenScore_BroadcastsGoldenScoreOnce()
+    {
+        var dbPath = CreateDatabasePath();
+        var fightId = await SeedRunningFightAsync(dbPath, elapsedSeconds: 5, goldenScoreEnabled: true);
+
+        var proxy = new Mock<IClientProxy>();
+        await using (var provider = BuildProvider(dbPath, proxy))
+        {
+            var evaluator = new MatchClockEvaluator(provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<MatchClockEvaluator>.Instance);
+            await evaluator.EvaluateOnceAsync(CancellationToken.None);
+            await evaluator.EvaluateOnceAsync(CancellationToken.None);
+        }
+
+        var update = Assert.Single(FightUpdates(proxy));
+        Assert.Equal(fightId, update.Fight.Id);
+        Assert.True(update.Fight.IsGoldenScore);
+        Assert.Equal(FightStatus.InProgress, update.Fight.Status);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_RegularTimeRunning_DoesNotBroadcast()
+    {
+        var dbPath = CreateDatabasePath();
+        await SeedRunningFightAsync(dbPath, elapsedSeconds: 0, goldenScoreEnabled: true);
+
+        var proxy = new Mock<IClientProxy>();
+        await using (var provider = BuildProvider(dbPath, proxy))
+        {
+            var evaluator = new MatchClockEvaluator(provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<MatchClockEvaluator>.Instance);
+            await evaluator.EvaluateOnceAsync(CancellationToken.None);
+        }
+
+        Assert.Empty(FightUpdates(proxy));
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_NotTiedAfterRegularTime_PausesWithoutGoldenScore()
+    {
+        var dbPath = CreateDatabasePath();
+        await SeedRunningFightAsync(dbPath, elapsedSeconds: 5, goldenScoreEnabled: true, whiteWazaAri: 1);
+
+        var proxy = new Mock<IClientProxy>();
+        await using (var provider = BuildProvider(dbPath, proxy))
+        {
+            var evaluator = new MatchClockEvaluator(provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<MatchClockEvaluator>.Instance);
+            await evaluator.EvaluateOnceAsync(CancellationToken.None);
+        }
+
+        var update = Assert.Single(FightUpdates(proxy));
+        Assert.Equal(FightStatus.Paused, update.Fight.Status);
+        Assert.False(update.Fight.IsGoldenScore);
     }
 
     [Fact]

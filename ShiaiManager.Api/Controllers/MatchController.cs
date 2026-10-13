@@ -29,6 +29,7 @@ public sealed class MatchController : ControllerBase
 
     /// <summary>
     /// Assigns the fight to a tatami (or clears it). Requires the Admin role.
+    /// A started fight stays on its tatami: moving it returns 409.
     /// </summary>
     [Authorize(Roles = "Admin")]
     [HttpPost("assign-tatami")]
@@ -52,6 +53,7 @@ public sealed class MatchController : ControllerBase
     /// Assigns many fights to tatamis in a single atomic request. Requires the Admin role.
     /// Fights whose athletes are not yet known are included; fights already on the requested
     /// tatami are skipped. Applying everything in one transaction avoids partial assignment.
+    /// Moving any started fight to another tatami rejects the whole request with 409.
     /// </summary>
     [Authorize(Roles = "Admin")]
     [HttpPost("/api/tournaments/{tournamentId:guid}/fights/assign-tatami-bulk")]

@@ -78,35 +78,6 @@ public sealed class TatamiQueueService : ITatamiQueueService
         && f.WhiteAthleteId is not null
         && f.BlueAthleteId is not null;
 
-    /// <summary>
-    /// Computes whether the fight is currently in the golden-score overtime phase.
-    /// True only when: the fight is active (InProgress or Paused), the category has golden score
-    /// enabled, the elapsed fight time has exceeded the regular match duration, AND the fighters
-    /// have tied scores (equal waza-ari counts and equal yuko counts).
-    /// </summary>
-    private static bool ComputeIsGoldenScore(FightRecord r)
-    {
-        if (r.Status != InProgress && r.Status != Paused) return false;
-        if (r.StartedAtUtc is null) return false;
-        if (r.Category is null || !r.Category.GoldenScoreEnabled) return false;
-
-        var referenceTime = r.OsaeKomiPausedAtUtc is not null
-            ? r.OsaeKomiPausedAtUtc.Value
-            : r.Status == Paused && r.PausedAtUtc is not null
-                ? r.PausedAtUtc.Value
-                : DateTimeOffset.UtcNow;
-        var elapsedSeconds = (referenceTime - r.StartedAtUtc.Value).TotalSeconds;
-        if (elapsedSeconds < r.Category.MatchDurationSeconds) return false;
-
-        // Golden score only applies when fighters have equal waza-ari and yuko counts (tied).
-        var whiteWazaAri = r.WhiteWazaAriCount;
-        var blueWazaAri = r.BlueWazaAriCount;
-        var whiteYuko = r.WhiteYukoCount;
-        var blueYuko = r.BlueYukoCount;
-
-        return whiteWazaAri == blueWazaAri && whiteYuko == blueYuko;
-    }
-
     private static Fight MapToModel(FightRecord r) =>
         new(r.Id,
             r.TournamentId,
@@ -145,5 +116,5 @@ public sealed class TatamiQueueService : ITatamiQueueService
             r.CompletedAtUtc,
             r.CreatedAtUtc,
             r.UpdatedAtUtc,
-            IsGoldenScore: ComputeIsGoldenScore(r));
+            IsGoldenScore: GoldenScoreRules.IsActive(r, r.Category, DateTimeOffset.UtcNow));
 }

@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
@@ -225,10 +226,7 @@ export class TatamiAssignmentComponent implements OnInit {
         this.info.set(this.i18n.translate('tatamiAssignment.autoAssignDone', { count: assignments.length }));
         this.assigning.set(false);
       },
-      error: (err) => {
-        this.error.set(extractApiError(err, this.i18n.translate('errors.save')));
-        this.assigning.set(false);
-      },
+      error: (err) => this.handleAssignError(err),
     });
   }
 
@@ -251,10 +249,7 @@ export class TatamiAssignmentComponent implements OnInit {
           fights.map((f) => (f.id === fightId ? { ...f, tatamiId } : f)));
         this.assigning.set(false);
       },
-      error: (err) => {
-        this.error.set(extractApiError(err, this.i18n.translate('errors.save')));
-        this.assigning.set(false);
-      },
+      error: (err) => this.handleAssignError(err),
     });
   }
 
@@ -313,11 +308,20 @@ export class TatamiAssignmentComponent implements OnInit {
         this.info.set(this.i18n.translate('tatamiAssignment.autoAssignDone', { count: assignments.length }));
         this.assigning.set(false);
       },
-      error: (err) => {
-        this.error.set(extractApiError(err, this.i18n.translate('errors.save')));
-        this.assigning.set(false);
-      },
+      error: (err) => this.handleAssignError(err),
     });
+  }
+
+  /** 409 means a fight was started since this page loaded; reload so the stale list disappears. */
+  private handleAssignError(err: unknown): void {
+    this.assigning.set(false);
+    if (err instanceof HttpErrorResponse && err.status === 409) {
+      this.load();
+      this.error.set(this.i18n.translate('tatamiAssignment.startedFightConflict'));
+      return;
+    }
+
+    this.error.set(extractApiError(err, this.i18n.translate('errors.save')));
   }
 
   private loadFightsForCategories(categories: Category[]): void {

@@ -63,6 +63,8 @@ public sealed class MatchService : IMatchService
             user,
             async (fight, ct) =>
             {
+                if (fight.TatamiId != tatamiId && !CanChangeTatami(fight)) return MatchActionResult.InvalidState;
+
                 if (tatamiId is not null)
                 {
                     var exists = await _dbContext.Tatamis
@@ -101,6 +103,9 @@ public sealed class MatchService : IMatchService
 
         // Every referenced fight must exist and belong to the tournament.
         if (fights.Count != fightIds.Count) return MatchActionResult.FightNotFound;
+
+        if (fights.Any(f => f.TatamiId != assignmentMap[f.Id] && !CanChangeTatami(f)))
+            return MatchActionResult.InvalidState;
 
         // Validate all distinct target tatamis belong to the tournament.
         var targetTatamiIds = assignmentMap.Values
@@ -1047,6 +1052,9 @@ public sealed class MatchService : IMatchService
     private static Guid? WinnerOf(FightRecord? source) =>
         source is { Status: var s, WinnerId: { } w } && s == Completed ? w : null;
 
+    /// <summary>A started fight stays on its tatami; only not-yet-started fights may be moved.</summary>
+    private static bool CanChangeTatami(FightRecord fight) => fight.Status == Pending;
+
     /// <summary>Returns the loser of a completed source fight, or null when not yet decided.</summary>
     private static Guid? LoserOf(FightRecord? source)
     {
@@ -1061,16 +1069,37 @@ public sealed class MatchService : IMatchService
     {
         var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
             _dbContext, fights.Select(f => f.CategoryId), cancellationToken);
+        var categoryIds = fights.Select(f => f.CategoryId).Distinct().ToList();
+        var categories = await _dbContext.Categories
+            .AsNoTracking()
+            .Where(c => categoryIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
 
         foreach (var fight in fights)
         {
+            var isGoldenScore = GoldenScoreRules.IsActive(fight, categories.GetValueOrDefault(fight.CategoryId), now);
             await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
                 "FightUpdated",
                 new FightUpdatedMessage(
-                    MapToFight(fight) with { Series = BestOfThreeSeries.DescribeOrNull(fight, seriesBouts) },
-                    DateTimeOffset.UtcNow),
+                    MapToFight(fight) with
+                    {
+                        Series = BestOfThreeSeries.DescribeOrNull(fight, seriesBouts),
+                        IsGoldenScore = isGoldenScore,
+                    },
+                    now),
                 CancellationToken.None);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<MatchActionResult> NotifyFightUpdatedAsync(Guid fightId, CancellationToken cancellationToken)
+    {
+        var fight = await _dbContext.Fights.AsNoTracking().FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
+        if (fight is null) return MatchActionResult.FightNotFound;
+
+        await BroadcastFightsUpdatedAsync([fight], cancellationToken);
+        return MatchActionResult.Success;
     }
 
     /// <summary>Describes the audit entry a fight operation should record after it succeeds.</summary>
