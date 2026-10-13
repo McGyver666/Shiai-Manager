@@ -151,7 +151,7 @@
 	animation: none;
 }
 
-/* Sized in the clock font so the fixed width (fits "20.0 / 20") matches the placeholder and never shifts neighbours. */
+/* Fixed width in the clock font (fits "20.0/20"), shared with the placeholder so neighbours never shift. */
 .hold-timer,
 .hold-timer-spacer {
 	justify-self: center;
@@ -159,7 +159,8 @@
 	box-sizing: border-box;
 	font-family: var(--ff-mono);
 	font-size: var(--display-clock-size);
-	width: calc(5.4ch + 0.9em + 4px);
+	/* value 4×.75ch + .08em spacing, gap .02em, target 4×.3ch, padding .1em, border 4px */
+	width: calc(4.2ch + 0.2em + 4px);
 	min-height: clamp(5.5rem, 10vw, 8rem);
 	display: flex;
 	flex-direction: column;
@@ -172,13 +173,13 @@
 
 .hold-timer {
 	text-align: center;
-	padding: .35rem .25em;
+	padding: .35rem .05em;
 	border-radius: var(--radius);
 	border: 2px solid var(--side-accent-soft);
 	background: color-mix(in srgb, var(--display-bg) 72%, transparent);
 	color: var(--display-text-muted);
 	font-weight: 800;
-	letter-spacing: .04em;
+	letter-spacing: .02em;
 }
 
 .hold-timer--blue {
@@ -201,12 +202,12 @@
 	display: flex;
 	align-items: baseline;
 	justify-content: center;
-	gap: .15em;
+	gap: .02em;
 	line-height: 1;
 }
 
 .hold-timer-value {
-	font-size: 1em;
+	font-size: .75em;
 	font-weight: 900;
 	font-variant-numeric: tabular-nums;
 	/* Reserve the widest label ("20.0") so the box doesn't jitter while counting. */
