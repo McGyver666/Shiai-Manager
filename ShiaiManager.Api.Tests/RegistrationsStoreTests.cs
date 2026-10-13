@@ -462,6 +462,145 @@ public sealed class RegistrationsStoreTests
         Assert.Equal(AgeGroupMessages.NoPresetForBirthYear.Key, unassigned.ReasonKey);
     }
 
+    private static async Task<(SqliteRegistrationsStore Store, Guid TournamentId, Guid AthleteId)> SeedU21AthleteWithMenCategoryAsync(
+        AppDbContext ctx,
+        decimal? weightKg = 70m)
+    {
+        var (tournamentId, athleteId, seededCategoryId) = await SeedAsync(ctx);
+        var categoriesStore = new SqliteCategoriesStore(ctx, NullLogger<SqliteCategoriesStore>.Instance);
+        await categoriesStore.DeleteAsync(seededCategoryId, CancellationToken.None);
+        var athlete = await ctx.Athletes.SingleAsync(x => x.Id == athleteId);
+        // Tournament year 2026: born 2007 means 19 years, naturally U21 next to the open adult class.
+        athlete.BirthYear = 2007;
+        athlete.WeightKg = weightKg;
+        ctx.CategoryPresets.AddRange(
+            new CategoryPresetRecord
+            {
+                Id = Guid.NewGuid(), TournamentId = tournamentId, AgeGroup = "U21", Gender = "Male",
+                MaxAgeYears = 20, MinAgeYears = 17, DefaultMatchDurationSeconds = 240,
+                WeightClassLimitsJson = "[73,null]", SortOrder = 0
+            },
+            new CategoryPresetRecord
+            {
+                Id = Guid.NewGuid(), TournamentId = tournamentId, AgeGroup = "Männer", Gender = "Male",
+                MaxAgeYears = null, MinAgeYears = 17, DefaultMatchDurationSeconds = 240,
+                WeightClassLimitsJson = "[73,null]", SortOrder = 1
+            });
+        await ctx.SaveChangesAsync();
+        await categoriesStore.CreateAsync(
+            tournamentId, "Männer -73 kg", "Männer", Gender.Male, 73m, null, null, null, 240, false, 180,
+            CancellationToken.None);
+        var store = new SqliteRegistrationsStore(ctx, NullLogger<SqliteRegistrationsStore>.Instance);
+        await store.CreateAsync(tournamentId, athleteId, weightKg ?? 0m, true, CancellationToken.None);
+        // CreateAsync overwrites the athlete weight, so restore the intended (possibly missing) weight.
+        await ctx.Entry(athlete).ReloadAsync();
+        athlete.WeightKg = weightKg;
+        await ctx.SaveChangesAsync();
+        return (store, tournamentId, athleteId);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AutoAssignAsync_WhenNaturalAgeGroupHasNoCategories_ReportsMissingCategoriesForNaturalAgeGroup()
+    {
+        var db = CreateDatabasePath();
+        await using var ctx = CreateDbContext(db);
+        await ctx.Database.EnsureCreatedAsync();
+        var (store, tournamentId, athleteId) = await SeedU21AthleteWithMenCategoryAsync(ctx);
+
+        var result = await store.AutoAssignAsync(tournamentId, CancellationToken.None);
+
+        Assert.Equal(0, result.AssignedCount);
+        var unassigned = Assert.Single(result.Unassigned);
+        Assert.Equal(athleteId, unassigned.AthleteId);
+        Assert.Equal("errors.ageGroups.noCategoriesForNaturalAgeGroup", unassigned.ReasonKey);
+        Assert.Equal("U21", unassigned.ReasonParameters!["ageGroup"]);
+        Assert.Equal("Für die natürliche Altersklasse U21 des Athleten sind keine Kategorien angelegt.", unassigned.Reason);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AutoAssignAsync_WhenSelectedStartAgeGroupHasNoCategories_ReportsMissingCategoriesForStartAgeGroup()
+    {
+        var db = CreateDatabasePath();
+        await using var ctx = CreateDbContext(db);
+        await ctx.Database.EnsureCreatedAsync();
+        var (store, tournamentId, _) = await SeedU21AthleteWithMenCategoryAsync(ctx);
+        var registration = await ctx.Registrations.SingleAsync();
+        registration.StartAgeGroup = "U21";
+        await ctx.SaveChangesAsync();
+
+        var result = await store.AutoAssignAsync(tournamentId, CancellationToken.None);
+
+        var unassigned = Assert.Single(result.Unassigned);
+        Assert.Equal("errors.ageGroups.noCategoriesForStartAgeGroup", unassigned.ReasonKey);
+        Assert.Equal("U21", unassigned.ReasonParameters!["ageGroup"]);
+        Assert.Equal("Für die Startaltersklasse U21 des Athleten sind keine Kategorien angelegt.", unassigned.Reason);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AutoAssignAsync_WhenAllCategoriesOfAgeGroupAreLocked_ReportsLockedCategories()
+    {
+        var db = CreateDatabasePath();
+        await using var ctx = CreateDbContext(db);
+        await ctx.Database.EnsureCreatedAsync();
+        var (store, tournamentId, _) = await SeedU21AthleteWithMenCategoryAsync(ctx);
+        var registration = await ctx.Registrations.SingleAsync();
+        registration.StartAgeGroup = "Männer";
+        var menCategory = await ctx.Categories.SingleAsync();
+        menCategory.IsLocked = true;
+        await ctx.SaveChangesAsync();
+
+        var result = await store.AutoAssignAsync(tournamentId, CancellationToken.None);
+
+        var unassigned = Assert.Single(result.Unassigned);
+        Assert.Equal("errors.ageGroups.allCategoriesLocked", unassigned.ReasonKey);
+        Assert.Equal("Männer", unassigned.ReasonParameters!["ageGroup"]);
+        Assert.Equal("Alle Kategorien der Altersklasse Männer sind gesperrt.", unassigned.Reason);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AutoAssignAsync_WhenWeightExceedsAllClassesOfAgeGroup_ReportsNoFittingWeightClass()
+    {
+        var db = CreateDatabasePath();
+        await using var ctx = CreateDbContext(db);
+        await ctx.Database.EnsureCreatedAsync();
+        var (store, tournamentId, _) = await SeedU21AthleteWithMenCategoryAsync(ctx, 95.50m);
+        var registration = await ctx.Registrations.SingleAsync();
+        registration.StartAgeGroup = "Männer";
+        await ctx.SaveChangesAsync();
+
+        var result = await store.AutoAssignAsync(tournamentId, CancellationToken.None);
+
+        var unassigned = Assert.Single(result.Unassigned);
+        Assert.Equal("errors.ageGroups.noFittingWeightClass", unassigned.ReasonKey);
+        Assert.Equal("Männer", unassigned.ReasonParameters!["ageGroup"]);
+        Assert.Equal("95.5", unassigned.ReasonParameters!["weightKg"]);
+        Assert.Equal("Keine passende Gewichtsklasse in der Altersklasse Männer für 95.5 kg gefunden.", unassigned.Reason);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AutoAssignAsync_WhenWeightMissingAndNoOpenClass_ReportsMissingWeight()
+    {
+        var db = CreateDatabasePath();
+        await using var ctx = CreateDbContext(db);
+        await ctx.Database.EnsureCreatedAsync();
+        var (store, tournamentId, _) = await SeedU21AthleteWithMenCategoryAsync(ctx, weightKg: null);
+        var registration = await ctx.Registrations.SingleAsync();
+        registration.StartAgeGroup = "Männer";
+        await ctx.SaveChangesAsync();
+
+        var result = await store.AutoAssignAsync(tournamentId, CancellationToken.None);
+
+        var unassigned = Assert.Single(result.Unassigned);
+        Assert.Equal("errors.ageGroups.noWeightWithoutOpenClass", unassigned.ReasonKey);
+        Assert.Equal("Männer", unassigned.ReasonParameters!["ageGroup"]);
+        Assert.Equal("Kein Gewicht erfasst und keine offene Gewichtsklasse in der Altersklasse Männer verfügbar.", unassigned.Reason);
+    }
+
     [Fact]
     [Trait("Category", "UnitTest")]
     public async Task DeleteAsync_WhenRegistrationExists_RemovesRegistration()

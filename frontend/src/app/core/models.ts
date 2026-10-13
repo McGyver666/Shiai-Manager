@@ -437,6 +437,7 @@ export interface UnassignedAthlete {
   lastName: string;
   reason: string;
   reasonKey: string | null;
+  reasonParameters: Record<string, string> | null;
 }
 
 export interface AutoAssignResult {

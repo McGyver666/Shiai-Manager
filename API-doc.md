@@ -44,7 +44,9 @@ bounds are only a plausibility check: the API does not enforce them, and the ass
 for confirmation before assigning outside the range. A null grade preserves the athlete's stored
 grade; a null license ID preserves the stored license number, while an empty string clears it.
 Supplied athlete corrections are saved atomically with the registration. Auto-assignment results
-carry an optional `reasonKey` translation key for each unassigned athlete.
+carry a `reasonKey` translation key and `reasonParameters` placeholder values (e.g. `ageGroup`,
+`weightKg`) for each unassigned athlete. The reason distinguishes a missing preset, no categories
+for the natural or selected start age group, only locked categories, and no fitting weight class.
 
 Category generation selects exactly one `ageGroup` and a gender mode (`Male`, `Female`, or `Mixed`).
 Mixed is available only when male and female presets for that age group both exist. The request has

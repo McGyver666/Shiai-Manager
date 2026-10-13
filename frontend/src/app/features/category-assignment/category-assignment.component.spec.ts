@@ -1,6 +1,6 @@
 import type { MockedObject } from 'vitest';
 import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { I18nService } from '../../core/i18n.service';
@@ -9,8 +9,15 @@ import { TournamentContextService } from '../../core/tournament-context.service'
 import { CategoryAssignmentComponent } from './category-assignment.component';
 
 describe('CategoryAssignmentComponent', () => {
-  let apiSpy: MockedObject<Pick<ApiService, 'assignCategory'>>;
+  let apiSpy: MockedObject<Pick<ApiService, 'assignCategory' | 'getCategories' | 'getRegistrations' | 'autoAssignCategories'>>;
   let component: any;
+  let fixture: ComponentFixture<CategoryAssignmentComponent>;
+
+  const translations: Record<string, string> = {
+    'errors.ageGroups.noCategoriesForNaturalAgeGroup': 'No categories for natural age group {ageGroup}.',
+  };
+  const translate = (key: string, params?: Record<string, string | number>) =>
+    (translations[key] ?? key).replace(/\{(\w+)\}/g, (_m, token: string) => String(params?.[token] ?? `{${token}}`));
 
   const category = {
     id: 'u11-40',
@@ -30,18 +37,24 @@ describe('CategoryAssignmentComponent', () => {
 
   beforeEach(() => {
     apiSpy = {
-      assignCategory: vi.fn().mockName('ApiService.assignCategory')
+      assignCategory: vi.fn().mockName('ApiService.assignCategory'),
+      getCategories: vi.fn().mockName('ApiService.getCategories'),
+      getRegistrations: vi.fn().mockName('ApiService.getRegistrations'),
+      autoAssignCategories: vi.fn().mockName('ApiService.autoAssignCategories'),
     };
     apiSpy.assignCategory.mockReturnValue(of({} as any));
+    apiSpy.getCategories.mockReturnValue(of([]));
+    apiSpy.getRegistrations.mockReturnValue(of([]));
     TestBed.configureTestingModule({
       imports: [CategoryAssignmentComponent],
       providers: [
         { provide: ApiService, useValue: apiSpy },
-        { provide: I18nService, useValue: { translate: (key: string) => key } },
+        { provide: I18nService, useValue: { translate } },
         { provide: TournamentContextService, useValue: { tournamentId: signal('tournament-1') } },
       ],
     });
-    component = TestBed.createComponent(CategoryAssignmentComponent).componentInstance;
+    fixture = TestBed.createComponent(CategoryAssignmentComponent);
+    component = fixture.componentInstance;
     component.categories.set([category]);
     component.registrations.set([registration]);
   });
@@ -71,5 +84,40 @@ describe('CategoryAssignmentComponent', () => {
     component.reassign(registration, selectWith(category.id));
 
     expect(apiSpy.assignCategory).toHaveBeenCalledWith('tournament-1', 'registration-1', { categoryId: 'u11-40' });
+  });
+
+  it('shows the localized auto-assignment reason next to each unassigned athlete', () => {
+    const unassignedRegistrations = [
+      { ...registration, id: 'registration-u21', athleteId: 'athlete-u21', athleteLastName: 'Junior', athleteFirstName: 'Jan', athleteWeightKg: 70 },
+      { ...registration, id: 'registration-old', athleteId: 'athlete-old', athleteLastName: 'Senior', athleteFirstName: 'Sam', athleteWeightKg: 80 },
+    ] as RegistrationDetail[];
+    apiSpy.getRegistrations.mockReturnValue(of(unassignedRegistrations));
+    apiSpy.autoAssignCategories.mockReturnValue(of({
+      assignedCount: 0,
+      unassignedCount: 2,
+      unassigned: [
+        {
+          athleteId: 'athlete-u21', firstName: 'Jan', lastName: 'Junior',
+          reason: 'Für die natürliche Altersklasse U21 des Athleten sind keine Kategorien angelegt.',
+          reasonKey: 'errors.ageGroups.noCategoriesForNaturalAgeGroup',
+          reasonParameters: { ageGroup: 'U21' },
+        },
+        {
+          athleteId: 'athlete-old', firstName: 'Sam', lastName: 'Senior',
+          reason: 'Unbekannter Grund',
+          reasonKey: 'errors.ageGroups.unknownKey',
+          reasonParameters: null,
+        },
+      ],
+    }));
+    fixture.detectChanges();
+
+    component.autoAssign();
+    fixture.detectChanges();
+
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('tbody tr')) as HTMLElement[];
+    const rowFor = (lastName: string) => rows.find((row) => row.textContent?.includes(lastName))!;
+    expect(rowFor('Junior').textContent).toContain('No categories for natural age group U21.');
+    expect(rowFor('Senior').textContent).toContain('Unbekannter Grund');
   });
 });
