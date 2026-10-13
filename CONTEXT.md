@@ -89,8 +89,10 @@ Use these terms as-is (German primary) in issues, tests, and code names; don't d
   It is editable before the first assigned bout starts and then locked for that leg. A return leg may
   have a separate lineup; lineups are configurable again before the team's next encounter.
 - **Begegnungskampf** (Encounter bout) — an individual bout created from a locked lineup. It uses
-  the existing Tatami queue and match-control lifecycle; each completed result updates the running
-  team-encounter score.
+  the existing Tatami queue and match-control lifecycle; each completed result updates the
+  Begegnungsstand.
+- **Begegnungsstand** (Encounter score) — the running count of won Begegnungskämpfe per team across
+  both legs of a Mannschaftsbegegnung, without under-score.
 - **Tageswaage** (Matchday weigh-in) — the confirmed actual body weight of an athlete on a specific
   matchday. A confirmed matchday weigh-in is required before an athlete may be assigned to a lineup;
   an existing tournament registration weight may prefill it but does not replace it. U16 athletes may
@@ -103,8 +105,16 @@ Use these terms as-is (German primary) in issues, tests, and code names; don't d
 - **Nichtantritt** (No-show) — a team does not appear by the end of the scheduled weighing period.
   The league profile automatically records the WKO forfeit result; the configured loss is 0:2 team
   points and 0:10/100 individual/under-score points, or 0:14/140 in the NRW league.
-- **Auslosung** (Draw) — bracket generation. Formats: single elimination, repechage, round-robin,
-  round-robin-with-knockout. A category **locks** on the first real fight start.
+- **Auslosung** (Draw) — bracket generation. Formats: single elimination, double elimination,
+  repechage, round-robin, round-robin-with-knockout, Best of Three. A category **locks** on the
+  first real fight start.
+- **Best of Three** — draw format for a category with exactly two athletes, decided by one
+  Kampfserie; preselected for such categories. See
+  [ADR-0012](docs/adr/0012-best-of-three-draw-format.md). _Avoid_: translating the name.
+- **Kampfserie** (Fight series) — up to three Kämpfe between the same two athletes; the first to
+  two wins takes the series. _Avoid_: Paarung, Matchup, Duell, Begegnung.
+- **Entscheidungskampf** (Deciding fight) — the third Kampf of a Kampfserie, only held at 1:1.
+- **Serienstand** (Series score) — the running count of won Kämpfe per athlete in a Kampfserie.
 - **Tatami** — a mat/fight area. Fights are queued and assigned per tatami.
 - **Kampf** (Fight) — a single bout. **Freilos** = a bye (does not count as a fight).
 - **Osae-komi** — hold-down; server-authoritative timing with Sono-mama/Yoshi pause and resume that freezes both hold and fight clocks.

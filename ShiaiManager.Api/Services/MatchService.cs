@@ -137,10 +137,7 @@ public sealed class MatchService : IMatchService
             tournamentId, user, "FightsAssignedToTatami", "Fight", tournamentId,
             $"Count={changed.Count}", cancellationToken);
 
-        foreach (var fight in changed)
-        {
-            await BroadcastFightUpdatedAsync(fight);
-        }
+        await BroadcastFightsUpdatedAsync(changed, cancellationToken);
 
         return MatchActionResult.Success;
     }
@@ -204,8 +201,7 @@ public sealed class MatchService : IMatchService
             $"Direction={direction}", cancellationToken);
 
         // Broadcast the two affected fights so all clients refresh their queue.
-        await BroadcastFightUpdatedAsync(ordered[index]);
-        await BroadcastFightUpdatedAsync(ordered[targetIndex]);
+        await BroadcastFightsUpdatedAsync([ordered[index], ordered[targetIndex]], cancellationToken);
 
         return MatchActionResult.Success;
     }
@@ -575,10 +571,11 @@ public sealed class MatchService : IMatchService
         fight.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         int resetCount = 0;
+        FightRecord? removedDecidingFight = null;
         if (winnerChanges)
         {
             resetCount = await ResetAffectedStartedFightsAsync(fight, cancellationToken);
-            await RecalculateProgressionAsync(fight.CategoryId, cancellationToken);
+            removedDecidingFight = await RecalculateProgressionAsync(fight.CategoryId, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -591,6 +588,13 @@ public sealed class MatchService : IMatchService
         await _auditLog.LogAsync(
             fight.TournamentId, user, "ResultEdited", "Fight", fight.Id,
             $"Previous=[{prev}] New=[{next}]", cancellationToken);
+
+        if (removedDecidingFight is not null)
+        {
+            await _auditLog.LogAsync(
+                fight.TournamentId, user, "DecidingFightRemoved", "Fight", removedDecidingFight.Id,
+                $"Status={removedDecidingFight.Status}; CorrectedFightId={fight.Id}", cancellationToken);
+        }
 
         _ = _hub.Clients.Group(fight.TournamentId.ToString())
             .SendAsync("CategoryFightsUpdated",
@@ -650,6 +654,20 @@ public sealed class MatchService : IMatchService
         SimulateProgression(cloned, drawFormat ?? string.Empty);
 
         var affected = new List<AffectedFightSummary>();
+
+        // A Kampfserie has no participant progression; a correction can only make the Entscheidungskampf obsolete.
+        if (BestOfThreeSeries.IsSeries(drawFormat))
+        {
+            var decider = fights.FirstOrDefault(f => f.Round == BestOfThreeSeries.DecidingRound);
+            if (decider?.StartedAtUtc is not null && !BestOfThreeSeries.NeedsDecidingFight(cloned))
+            {
+                affected.Add(new AffectedFightSummary(
+                    decider.Id, categoryName, decider.Round, decider.FightNumber, decider.Status));
+            }
+
+            return affected;
+        }
+
         foreach (var clone in cloned)
         {
             if (clone.Id == editedFight.Id) continue;
@@ -728,7 +746,7 @@ public sealed class MatchService : IMatchService
     /// </summary>
     private static void SimulateProgression(List<FightRecord> fights, string drawFormat)
     {
-        if (drawFormat == BracketFormat.RoundRobin.ToString()) return;
+        if (drawFormat == BracketFormat.RoundRobin.ToString() || BestOfThreeSeries.IsSeries(drawFormat)) return;
 
         if (drawFormat == BracketFormat.DoubleElimination.ToString())
         {
@@ -807,8 +825,10 @@ public sealed class MatchService : IMatchService
     /// purely from the winners and losers of their source fights. Round-1 athlete assignments are never touched.
     /// Group-stage fights are skipped — they have no bracket progression.
     /// This keeps the bracket consistent after both confirmation and correction.
+    /// For a Kampfserie it creates or removes the Entscheidungskampf instead.
     /// </summary>
-    private async Task RecalculateProgressionAsync(Guid categoryId, CancellationToken cancellationToken)
+    /// <returns>The Entscheidungskampf removed from a Kampfserie, or null.</returns>
+    private async Task<FightRecord?> RecalculateProgressionAsync(Guid categoryId, CancellationToken cancellationToken)
     {
         var fights = await _dbContext.Fights
             .Where(f => f.CategoryId == categoryId)
@@ -824,17 +844,22 @@ public sealed class MatchService : IMatchService
         // winner-progression brackets.
         if (drawFormat == BracketFormat.RoundRobin.ToString())
         {
-            return;
+            return null;
+        }
+
+        if (BestOfThreeSeries.IsSeries(drawFormat))
+        {
+            return SyncDecidingFight(fights);
         }
 
         if (drawFormat == BracketFormat.DoubleElimination.ToString())
         {
             RecalculateDoubleEliminationProgression(fights);
-            return;
+            return null;
         }
 
         var main = fights.Where(f => f.BracketType == MainType).ToList();
-        if (main.Count == 0) return;
+        if (main.Count == 0) return null;
 
         var maxRound = main.Max(f => f.Round);
 
@@ -864,6 +889,40 @@ public sealed class MatchService : IMatchService
             repechage.BlueAthleteId = LoserOf(FindMain(semifinalRound, 2));
             repechage.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates the Entscheidungskampf at Serienstand 1:1 (same athletes, same tatami as bout 2) and removes it
+    /// when a correction made it obsolete. Returns the removed fight, if any.
+    /// </summary>
+    private FightRecord? SyncDecidingFight(List<FightRecord> bouts)
+    {
+        var decider = bouts.FirstOrDefault(f => f.Round == BestOfThreeSeries.DecidingRound);
+        var needed = BestOfThreeSeries.NeedsDecidingFight(bouts);
+
+        if (needed && decider is null)
+        {
+            var second = bouts.Single(f => f.Round == 2);
+            _dbContext.Fights.Add(BestOfThreeSeries.CreateBout(
+                second.TournamentId,
+                second.CategoryId,
+                BestOfThreeSeries.DecidingRound,
+                second.WhiteAthleteId,
+                second.BlueAthleteId,
+                second.TatamiId,
+                DateTimeOffset.UtcNow));
+            return null;
+        }
+
+        if (!needed && decider is not null)
+        {
+            _dbContext.Fights.Remove(decider);
+            return decider;
+        }
+
+        return null;
     }
 
     private static void RecalculateDoubleEliminationProgression(List<FightRecord> fights)
@@ -996,11 +1055,23 @@ public sealed class MatchService : IMatchService
         return source.WinnerId == source.WhiteAthleteId ? source.BlueAthleteId : source.WhiteAthleteId;
     }
 
-    private Task BroadcastFightUpdatedAsync(FightRecord fight) =>
-        _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
-            "FightUpdated",
-            new FightUpdatedMessage(MapToFight(fight), DateTimeOffset.UtcNow),
-            CancellationToken.None);
+    private async Task BroadcastFightsUpdatedAsync(
+        IReadOnlyCollection<FightRecord> fights,
+        CancellationToken cancellationToken)
+    {
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
+            _dbContext, fights.Select(f => f.CategoryId), cancellationToken);
+
+        foreach (var fight in fights)
+        {
+            await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
+                "FightUpdated",
+                new FightUpdatedMessage(
+                    MapToFight(fight) with { Series = BestOfThreeSeries.DescribeOrNull(fight, seriesBouts) },
+                    DateTimeOffset.UtcNow),
+                CancellationToken.None);
+        }
+    }
 
     /// <summary>Describes the audit entry a fight operation should record after it succeeds.</summary>
     private readonly record struct FightAudit(string Action, string? Details);
@@ -1031,7 +1102,7 @@ public sealed class MatchService : IMatchService
                 fight.TournamentId, user, entry.Action, "Fight", fight.Id, entry.Details, cancellationToken);
         }
 
-        await BroadcastFightUpdatedAsync(fight);
+        await BroadcastFightsUpdatedAsync([fight], cancellationToken);
         return MatchActionResult.Success;
     }
 

@@ -48,6 +48,12 @@
   font-family: var(--ff-disp);
 }
 
+.series-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--c-muted);
+}
+
 .ranking-table,
 .medal-table,
 .club-table {

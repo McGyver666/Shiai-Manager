@@ -1,0 +1,65 @@
+/* Hosts can tune size, font and side colors via the --running-score-* custom properties. */
+:host {
+  display: inline-flex;
+}
+
+.running-score {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  line-height: 1;
+}
+
+.running-score__heading {
+  font-size: var(--running-score-heading-size, 0.75rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.running-score__values {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15em;
+  font-family: var(--running-score-value-font, inherit);
+  font-size: var(--running-score-value-size, 2.25rem);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.running-score__value--white {
+  color: var(--running-score-white-color, var(--text-strong, currentColor));
+}
+
+.running-score__value--blue {
+  color: var(--running-score-accent-color, var(--side-accent, #1565c0));
+}
+
+.running-score__value--red {
+  color: var(--running-score-accent-color, var(--side-accent, #b3261e));
+}
+
+:host-context(html[data-theme="dark"]) .running-score__value--blue,
+:host-context(html[data-theme="dark"]) .running-score__value--red {
+  color: var(--running-score-accent-color, var(--side-accent-contrast));
+}
+
+.running-score__separator {
+  opacity: 0.5;
+}
+
+.running-score__note {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.running-score--compact .running-score__heading {
+  font-size: var(--running-score-heading-size, 0.65rem);
+}
+
+.running-score--compact .running-score__values {
+  font-size: var(--running-score-value-size, 1.5rem);
+}

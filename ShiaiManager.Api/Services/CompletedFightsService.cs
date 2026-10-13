@@ -73,6 +73,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
             .Select(c => new { c.Id, c.Name })
             .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
 
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(_dbContext, categoryIds, cancellationToken);
+
         var tatamiIds = fights
             .Where(f => f.TatamiId.HasValue)
             .Select(f => f.TatamiId!.Value)
@@ -163,7 +165,8 @@ public sealed class CompletedFightsService : ICompletedFightsService
                 f.BlueAthleteId,
                 f.StartedAtUtc,
                 f.CompletedAtUtc!.Value,
-                DurationSeconds(f)))
+                DurationSeconds(f),
+                BestOfThreeSeries.DescribeOrNull(f, seriesBouts)))
             .ToArray();
     }
 }

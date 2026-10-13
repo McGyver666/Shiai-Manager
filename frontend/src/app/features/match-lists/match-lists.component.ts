@@ -17,6 +17,8 @@ import { SideThemeService } from '../../core/side-theme.service';
 import { CategoryFightsUpdatedEvent, TournamentHubService } from '../../core/tournament-hub.service';
 import { TranslatePipe } from '../../core/translate.pipe';
 import { Category, Fight, PublicAthlete, PublicClub, RoundRobinStanding, Tournament } from '../../core/models';
+import { isSeriesFormat, seriesBoutHeading, seriesScoreSides } from '../../shared/fight-series';
+import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 
 interface RoundGroup {
   round: number;
@@ -42,7 +44,7 @@ interface ConnectorPath {
 @Component({
   selector: 'app-match-lists',
   standalone: true,
-  imports: [TranslatePipe],
+  imports: [TranslatePipe, RunningScoreComponent],
   templateUrl: './match-lists.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './match-lists.component.css',
@@ -345,6 +347,22 @@ export class MatchListsComponent implements OnInit, OnDestroy {
   protected isCategoryPureRoundRobin(category: Category): boolean {
     return category.drawFormat === 'RoundRobin';
   }
+
+  protected isCategorySeries(category: Category): boolean {
+    return isSeriesFormat(category.drawFormat);
+  }
+
+  protected seriesFights(categoryId: string): Fight[] {
+    return [...this.fightsForCategory(categoryId)].sort((a, b) => this.compareFights(a, b));
+  }
+
+  /** Serienstand in list layout (White first, as in every slot pair); null before the series data is loaded. */
+  protected seriesScore(categoryId: string): RunningScoreSide[] | null {
+    const series = this.fightsForCategory(categoryId).find((fight) => fight.series)?.series;
+    return seriesScoreSides(series, 'white', this.sideTheme.accentSideColor(this.tournament()), (key) => this.i18n.translate(key));
+  }
+
+  protected readonly seriesFightLabel = seriesBoutHeading;
 
   protected isCategoryRoundRobinWithKnockout(category: Category): boolean {
     return category.drawFormat === 'RoundRobinWithKnockout';

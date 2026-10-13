@@ -41,6 +41,11 @@ public sealed class TatamiQueueService : ITatamiQueueService
             .Where(f => f.TournamentId == tournamentId && f.TatamiId == tatamiId)
             .ToListAsync(cancellationToken);
 
+        var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
+            _dbContext, records.Select(f => f.CategoryId), cancellationToken);
+
+        Fight Map(FightRecord r) => MapToModel(r) with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) };
+
         // In-progress fights first, then ready pending fights. Pending fights honor a manual
         // queue order (QueueOrder) when set, falling back to bracket order (Round, FightNumber).
         var playable = records
@@ -50,7 +55,7 @@ public sealed class TatamiQueueService : ITatamiQueueService
             .ThenBy(f => f.QueueOrder ?? int.MaxValue)
             .ThenBy(f => f.Round)
             .ThenBy(f => f.FightNumber)
-            .Select(MapToModel)
+            .Select(Map)
             .ToList();
 
         return new TatamiQueue(

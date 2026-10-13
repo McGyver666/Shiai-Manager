@@ -36,6 +36,13 @@ public interface IBracketService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Re-draws an unlocked, already drawn category with its stored format after its athlete assignment
+    /// changed. A Best-of-Three draw that no longer has exactly two athletes is discarded (fights deleted,
+    /// draw format cleared); other failures are logged and keep the existing fights.
+    /// </summary>
+    Task RefreshDrawAsync(Guid tournamentId, Guid categoryId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Swaps two athletes' positions across all fights in the bracket.
     /// Returns <see cref="SwapResult.BracketLocked"/> when any non-bye fight has been started or completed.
     /// Returns <see cref="SwapResult.AthleteNotInBracket"/> when either athlete is not in the bracket.

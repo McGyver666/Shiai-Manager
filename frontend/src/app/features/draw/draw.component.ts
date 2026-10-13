@@ -8,6 +8,9 @@ import { TournamentContextService } from '../../core/tournament-context.service'
 import { I18nService } from '../../core/i18n.service';
 import { extractApiError } from '../../core/http-error';
 import { Athlete, BracketFormat, Category, Club, Fight, RegistrationDetail, RoundRobinStanding } from '../../core/models';
+import { isSeriesFormat, seriesBoutHeading, seriesScoreSides } from '../../shared/fight-series';
+import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
+import { categoryDrawFormats, DRAW_FORMAT_LABEL_KEYS, effectiveDrawFormat, GLOBAL_DRAW_FORMATS } from './draw-format';
 
 /** A group of fights sharing the same bracket type and round, for rendering. */
 interface RoundGroup {
@@ -33,7 +36,7 @@ interface ConnectorPath {
 @Component({
   selector: 'app-draw',
   standalone: true,
-  imports: [FormsModule, RouterLink, TranslatePipe],
+  imports: [FormsModule, RouterLink, TranslatePipe, RunningScoreComponent],
   templateUrl: './draw.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './draw.component.css',
@@ -52,6 +55,8 @@ export class DrawComponent implements OnInit {
   private readonly registrations = signal<RegistrationDetail[]>([]);
 
   protected readonly globalFormat = signal<BracketFormat>('SingleElimination');
+  protected readonly globalFormats = GLOBAL_DRAW_FORMATS;
+  protected readonly formatLabelKeys = DRAW_FORMAT_LABEL_KEYS;
   protected readonly error = signal<string | null>(null);
   protected readonly generatingAll = signal(false);
   protected readonly showNextStepHint = signal(false);
@@ -107,15 +112,14 @@ export class DrawComponent implements OnInit {
     this.api.getCategories(id).subscribe({
       next: (x) => {
         this.categories.set(x);
+        // Only explicit choices are kept; stored formats and the preselection are derived in categoryFormat().
         const knownFormats = this.formatByCategory();
         const nextFormats = new Map<string, BracketFormat>();
         for (const category of x) {
-          nextFormats.set(
-            category.id,
-            knownFormats.get(category.id)
-              ?? category.drawFormat
-              ?? this.globalFormat(),
-          );
+          const known = knownFormats.get(category.id);
+          if (known) {
+            nextFormats.set(category.id, known);
+          }
         }
         this.formatByCategory.set(nextFormats);
         for (const category of x) {
@@ -151,7 +155,20 @@ export class DrawComponent implements OnInit {
   }
 
   protected categoryFormat(categoryId: string): BracketFormat {
-    return this.formatByCategory().get(categoryId) ?? this.globalFormat();
+    return effectiveDrawFormat({
+      explicit: this.formatByCategory().get(categoryId),
+      stored: this.categories().find((category) => category.id === categoryId)?.drawFormat ?? null,
+      athleteCount: this.categoryAthleteCount(categoryId),
+      globalFormat: this.globalFormat(),
+    });
+  }
+
+  protected categoryFormats(categoryId: string): BracketFormat[] {
+    return categoryDrawFormats(this.categoryAthleteCount(categoryId), this.categoryFormat(categoryId));
+  }
+
+  private categoryAthleteCount(categoryId: string): number {
+    return this.registrations().filter((registration) => registration.categoryId === categoryId).length;
   }
 
   protected setCategoryFormat(categoryId: string, format: BracketFormat): void {
@@ -160,11 +177,12 @@ export class DrawComponent implements OnInit {
     this.formatByCategory.set(next);
   }
 
+  /** Applies the global format to every category that is neither locked nor already drawn. */
   protected applyGlobalFormat(format: BracketFormat): void {
     this.globalFormat.set(format);
     const next = new Map(this.formatByCategory());
     for (const category of this.categories()) {
-      if (!category.isLocked) {
+      if (!category.isLocked && !category.drawFormat) {
         next.set(category.id, format);
       }
     }
@@ -211,8 +229,24 @@ export class DrawComponent implements OnInit {
 
   protected isDoubleEliminationLimitExceeded(categoryId: string): boolean {
     return this.categoryFormat(categoryId) === 'DoubleElimination'
-      && this.registrations().filter((registration) => registration.categoryId === categoryId).length > 32;
+      && this.categoryAthleteCount(categoryId) > 32;
   }
+
+  /** True when the category was drawn as a Kampfserie (Best of Three). */
+  protected isCategorySeries(categoryId: string): boolean {
+    return isSeriesFormat(this.categories().find((category) => category.id === categoryId)?.drawFormat);
+  }
+
+  protected seriesFights(categoryId: string): Fight[] {
+    return [...this.fightsForCategory(categoryId)].sort((a, b) => a.round - b.round);
+  }
+
+  protected seriesScore(categoryId: string): RunningScoreSide[] | null {
+    const series = this.fightsForCategory(categoryId).find((fight) => fight.series)?.series;
+    return seriesScoreSides(series, 'white', this.context.tournament()?.accentSideColor ?? 'Blue', (key) => this.i18n.translate(key));
+  }
+
+  protected readonly seriesFightLabel = seriesBoutHeading;
 
   protected mainRoundsForCategory(categoryId: string): RoundGroup[] {
     return this.groupRounds(this.fightsForCategory(categoryId), 'Main');
@@ -505,10 +539,14 @@ export class DrawComponent implements OnInit {
         }
       },
       error: (err) => {
-        this.setCategoryError(category.id, extractApiError(err, this.i18n.translate('errors.save')));
+        this.setCategoryError(category.id, this.saveError(err));
         this.setCategoryLoading(category.id, false);
       },
     });
+  }
+
+  private saveError(err: unknown): string {
+    return extractApiError(err, this.i18n.translate('errors.save'), (key) => this.i18n.translate(key));
   }
 
   protected generateAll(): void {
@@ -564,7 +602,7 @@ export class DrawComponent implements OnInit {
           run(index + 1);
         },
         error: (err) => {
-          this.setCategoryError(category.id, extractApiError(err, this.i18n.translate('errors.save')));
+          this.setCategoryError(category.id, this.saveError(err));
           this.setCategoryLoading(category.id, false);
           run(index + 1);
         },

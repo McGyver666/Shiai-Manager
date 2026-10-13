@@ -299,6 +299,26 @@
   margin-bottom: 1rem;
 }
 
+/* ── Kampfserie (Best of Three): Serienstand above the bouts side by side ── */
+.series {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.series-fights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+}
+
+/* Same width as a bracket round column. */
+.series-fights .fight {
+  width: 200px;
+}
+
 @media (max-width: 900px) {
   .toolbar-actions {
     width: 100%;

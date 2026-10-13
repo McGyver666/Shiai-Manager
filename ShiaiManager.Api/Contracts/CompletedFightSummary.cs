@@ -1,3 +1,5 @@
+using ShiaiManager.Api.Models;
+
 namespace ShiaiManager.Api.Contracts;
 
 /// <summary>
@@ -34,6 +36,7 @@ namespace ShiaiManager.Api.Contracts;
 /// <param name="StartedAtUtc">Timestamp when the fight was started; null when not recorded.</param>
 /// <param name="CompletedAtUtc">Timestamp when the fight was completed.</param>
 /// <param name="DurationSeconds">Wall-clock duration between start and completion in seconds; null when start or end is missing.</param>
+/// <param name="Series">Position and Serienstand within a Kampfserie; null for fights outside a series.</param>
 public sealed record CompletedFightSummary(
     Guid FightId,
     Guid CategoryId,
@@ -64,4 +67,5 @@ public sealed record CompletedFightSummary(
     Guid? BlueAthleteId,
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset CompletedAtUtc,
-    int? DurationSeconds);
+    int? DurationSeconds,
+    FightSeries? Series = null);

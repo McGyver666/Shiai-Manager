@@ -41,7 +41,33 @@
                 <span class="match-category-count">{{ fightsForCategory(cat.id).length }} {{ 'draw.fightsCount' | t }}</span>
               </header>
 
-              @if (isCategoryPureRoundRobin(cat)) {
+              @if (isCategorySeries(cat)) {
+                <div class="series">
+                  @if (seriesScore(cat.id); as sides) {
+                    <app-running-score [heading]="'series.heading' | t" [sides]="sides" />
+                  }
+                  <div class="rounds-grid">
+                    @for (f of seriesFights(cat.id); track f.id) {
+                      @let label = seriesFightLabel(f);
+                      <div class="fight">
+                        <div class="fight-no">{{ label.key | t: label.params }}</div>
+                        <div class="slot white" [class.winner]="f.winnerId && f.winnerId === f.whiteAthleteId">
+                          <div class="slot-name">{{ drawAthleteName(f.whiteAthleteId, f.isBye, cat.id, f, 'white') }}</div>
+                          @if (drawAthleteClubName(f.whiteAthleteId, f.isBye); as clubName) {
+                            <div class="slot-club">{{ clubName }}</div>
+                          }
+                        </div>
+                        <div class="slot blue" [class.winner]="f.winnerId && f.winnerId === f.blueAthleteId">
+                          <div class="slot-name">{{ drawAthleteName(f.blueAthleteId, f.isBye, cat.id, f, 'blue') }}</div>
+                          @if (drawAthleteClubName(f.blueAthleteId, f.isBye); as clubName) {
+                            <div class="slot-club">{{ clubName }}</div>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              } @else if (isCategoryPureRoundRobin(cat)) {
                 @if (allStandingsForCategory(cat.id).length > 0) {
                   <div class="standings-wrap">
                     <h4 class="round-title">{{ 'draw.standings' | t }}</h4>

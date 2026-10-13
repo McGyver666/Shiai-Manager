@@ -102,6 +102,10 @@ public sealed class FightsController : ControllerBase
             fights = await _bracketService.GenerateAsync(
                 tournamentId, categoryId, request.Format.Value, cancellationToken);
         }
+        catch (LocalizedOperationException ex)
+        {
+            return this.LocalizedValidationProblem(nameof(request.Format), ex.Localized);
+        }
         catch (InvalidOperationException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);

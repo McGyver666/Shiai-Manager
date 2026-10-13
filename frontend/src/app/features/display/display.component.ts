@@ -18,6 +18,9 @@ import { CategoryFightsUpdatedEvent, TournamentHubService } from '../../core/tou
 import { TranslatePipe } from '../../core/translate.pipe';
 import { Athlete, Category, Club, Fight, FightSide, Tatami, TatamiQueue, Tournament } from '../../core/models';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
+import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
+import { seriesScoreSides } from '../../shared/fight-series';
+import { I18nService } from '../../core/i18n.service';
 
 interface TatamiDisplay {
   tatami: Tatami;
@@ -30,7 +33,7 @@ interface TatamiDisplay {
 @Component({
   selector: 'app-display',
   standalone: true,
-  imports: [TranslatePipe, ShidoIndicatorComponent],
+  imports: [TranslatePipe, ShidoIndicatorComponent, RunningScoreComponent],
   templateUrl: './display.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './display.component.css',
@@ -42,6 +45,7 @@ export class DisplayComponent implements OnInit, OnDestroy {
   private readonly time = inject(TimeService);
   private readonly route = inject(ActivatedRoute);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly i18n = inject(I18nService);
 
   protected readonly tournamentId = signal<string | null>(null);
   protected readonly tatamiModeTatamiId = signal<string | null>(null);
@@ -352,6 +356,13 @@ export class DisplayComponent implements OnInit, OnDestroy {
       .slice(0, 3);
   }
 
+  /** Serienstand in the display layout (accent side left); null outside a Kampfserie. */
+  protected seriesScore(fight: Fight): RunningScoreSide[] | null {
+    return fight.series
+      ? seriesScoreSides(fight.series, 'blue', this.sideTheme.accentSideColor(this.tournament()), (key) => this.i18n.translate(key))
+      : null;
+  }
+
   protected hasIppon(fight: Fight, side: FightSide): boolean {
     return this.scoreCount(fight, side, 'ippon') > 0;
   }
@@ -388,12 +399,12 @@ export class DisplayComponent implements OnInit, OnDestroy {
       const runningSeconds = Math.min(capSeconds, Math.max(0, Math.ceil(elapsedExactSeconds)));
       const remainingToCap = Math.max(0, capSeconds - elapsedExactSeconds);
       const showTenths = fight.osaeKomiPausedAtUtc !== null || remainingToCap <= 10;
-      return showTenths ? `${elapsedExactSeconds.toFixed(1)}s` : `${runningSeconds}s`;
+      return showTenths ? elapsedExactSeconds.toFixed(1) : `${runningSeconds}`;
     }
 
     const persisted = this.persistedOsaeKomiMap.get(fight.id);
     if (persisted) {
-      return `${persisted.seconds.toFixed(1)}s`;
+      return persisted.seconds.toFixed(1);
     }
 
     return '--';
@@ -407,10 +418,10 @@ export class DisplayComponent implements OnInit, OnDestroy {
 
     const persisted = this.persistedOsaeKomiMap.get(fight.id);
     if (!this.isOsaeKomiRunning(fight) && persisted) {
-      return `${persisted.cap}s`;
+      return `${persisted.cap}`;
     }
 
-    return `${this.getOsaeKomiCapForFight(fight, side)}s`;
+    return `${this.getOsaeKomiCapForFight(fight, side)}`;
   }
 
   private hasWazaAri(fight: Fight, side: FightSide): boolean {
@@ -559,18 +570,10 @@ export class DisplayComponent implements OnInit, OnDestroy {
     // Use fight.isGoldenScore from server (reload-safe, score-aware).
     if (fight.isGoldenScore) {
       const gsElapsed = elapsedSeconds - matchDuration;
-      const gsRemaining = Math.max(0, goldenScoreDuration - gsElapsed);
-      const showTenths = fight.status === 'InProgress' && gsRemaining <= 10;
-      return showTenths
-        ? this.formatTenthsCountdown(gsRemaining)
-        : this.formatWholeSeconds(gsRemaining);
+      return this.formatWholeSeconds(Math.max(0, goldenScoreDuration - gsElapsed));
     }
 
-    const remainingSeconds = Math.max(0, matchDuration - elapsedSeconds);
-    const showTenths = fight.status === 'InProgress' && remainingSeconds <= 10;
-    return showTenths
-      ? this.formatTenthsCountdown(remainingSeconds)
-      : this.formatWholeSeconds(remainingSeconds);
+    return this.formatWholeSeconds(Math.max(0, matchDuration - elapsedSeconds));
   }
 
   /** Splits the timer label around its minutes:seconds colon so the colon can
@@ -588,15 +591,6 @@ export class DisplayComponent implements OnInit, OnDestroy {
     const m = Math.floor(rounded / 60);
     const s = rounded % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }
-
-  private formatTenthsCountdown(seconds: number): string {
-    const clamped = Math.max(0, seconds);
-    const wholeSeconds = Math.floor(clamped);
-    const tenths = Math.floor((clamped - wholeSeconds) * 10);
-    const m = Math.floor(wholeSeconds / 60);
-    const s = wholeSeconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${tenths}`;
   }
 
   protected athleteName(id: string | null): string {

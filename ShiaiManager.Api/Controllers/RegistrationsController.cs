@@ -22,7 +22,6 @@ public sealed class RegistrationsController : ControllerBase
     private readonly ICategoryPresetsStore _categoryPresetsStore;
     private readonly IBracketService _bracketService;
     private readonly IDokumePassParser _dokumePassParser;
-    private readonly ILogger<RegistrationsController> _logger;
 
     /// <summary>
     /// Initializes a new controller instance.
@@ -34,8 +33,7 @@ public sealed class RegistrationsController : ControllerBase
         ITournamentStore tournamentStore,
         ICategoryPresetsStore categoryPresetsStore,
         IBracketService bracketService,
-        IDokumePassParser dokumePassParser,
-        ILogger<RegistrationsController> logger)
+        IDokumePassParser dokumePassParser)
     {
         ArgumentNullException.ThrowIfNull(registrationsStore);
         ArgumentNullException.ThrowIfNull(athletesStore);
@@ -44,7 +42,6 @@ public sealed class RegistrationsController : ControllerBase
         ArgumentNullException.ThrowIfNull(categoryPresetsStore);
         ArgumentNullException.ThrowIfNull(bracketService);
         ArgumentNullException.ThrowIfNull(dokumePassParser);
-        ArgumentNullException.ThrowIfNull(logger);
         _registrationsStore = registrationsStore;
         _athletesStore = athletesStore;
         _categoriesStore = categoriesStore;
@@ -52,7 +49,6 @@ public sealed class RegistrationsController : ControllerBase
         _categoryPresetsStore = categoryPresetsStore;
         _bracketService = bracketService;
         _dokumePassParser = dokumePassParser;
-        _logger = logger;
     }
 
     /// <summary>
@@ -295,7 +291,7 @@ public sealed class RegistrationsController : ControllerBase
 
         if (registration.CategoryId.HasValue)
         {
-            await RefreshCategoryDrawIfPossibleAsync(
+            await _bracketService.RefreshDrawAsync(
                 tournamentId,
                 registration.CategoryId.Value,
                 cancellationToken);
@@ -529,7 +525,7 @@ public sealed class RegistrationsController : ControllerBase
 
         if (oldCategory is not null && nextCategoryId is null)
         {
-            await RefreshCategoryDrawIfPossibleAsync(tournamentId, oldCategory.Id, cancellationToken);
+            await _bracketService.RefreshDrawAsync(tournamentId, oldCategory.Id, cancellationToken);
         }
 
         return Ok(updated);
@@ -549,39 +545,7 @@ public sealed class RegistrationsController : ControllerBase
     {
         foreach (var categoryId in categoryIds.Distinct())
         {
-            await RefreshCategoryDrawIfPossibleAsync(tournamentId, categoryId, cancellationToken);
-        }
-    }
-
-    private async Task RefreshCategoryDrawIfPossibleAsync(
-        Guid tournamentId,
-        Guid categoryId,
-        CancellationToken cancellationToken)
-    {
-        var category = await _categoriesStore.GetByIdAsync(categoryId, cancellationToken);
-        if (category is null
-            || category.TournamentId != tournamentId
-            || category.IsLocked
-            || category.DrawFormat is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _bracketService.GenerateAsync(
-                tournamentId,
-                categoryId,
-                category.DrawFormat.Value,
-                cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogInformation(
-                ex,
-                "Automatic draw refresh skipped for category {CategoryId} in tournament {TournamentId}.",
-                categoryId,
-                tournamentId);
+            await _bracketService.RefreshDrawAsync(tournamentId, categoryId, cancellationToken);
         }
     }
 

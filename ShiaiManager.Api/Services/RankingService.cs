@@ -165,6 +165,20 @@ public sealed class RankingService : IRankingService
 
         var entries = new List<RankingEntry>();
 
+        if (BestOfThreeSeries.IsSeries(drawFormat))
+        {
+            if (BestOfThreeSeries.WinnerOf(mainFights) is not { } seriesWinner)
+                return entries;
+
+            var seriesLoser = BestOfThreeSeries.LoserOf(mainFights);
+            var winnerWins = BestOfThreeSeries.WinsOf(mainFights, seriesWinner);
+            var loserWins = BestOfThreeSeries.WinsOf(mainFights, seriesLoser);
+            entries.Add(new RankingEntry(1, seriesWinner, AthleteName(seriesWinner), ClubName(seriesWinner), winnerWins, loserWins));
+            if (seriesLoser is { } loser)
+                entries.Add(new RankingEntry(2, loser, AthleteName(loser), ClubName(loser), loserWins, winnerWins));
+            return entries;
+        }
+
         if (mainFights.Count > 0)
         {
             var maxRound = mainFights.Max(f => f.Round);
