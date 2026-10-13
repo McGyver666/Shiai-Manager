@@ -37,7 +37,7 @@ import {
 } from '../../core/models';
 
 const OPERATOR_NAME_KEY = 'judo.operatorName';
-const KEYBOARD_BLOCKED_SELECTORS = 'input, textarea, select, button, dialog, [contenteditable="true"], [role="dialog"], [aria-modal="true"]';
+const KEYBOARD_BLOCKED_SELECTORS = 'input, textarea, select, dialog, [contenteditable]:not([contenteditable="false" i]), [role="dialog"], [aria-modal="true"]';
 
 interface WinnerConfirmationState {
   fight: Fight;

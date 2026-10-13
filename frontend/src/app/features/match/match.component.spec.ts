@@ -24,6 +24,7 @@ describe('MatchComponent', () => {
   let startFightSpy: Mock;
   let pauseFightSpy: Mock;
   let resumeFightSpy: Mock;
+  let adjustScoreSpy: Mock;
   let startOsaeKomiSpy: Mock;
   let stopOsaeKomiSpy: Mock;
   let tournamentSignal: WritableSignal<Tournament>;
@@ -147,6 +148,7 @@ describe('MatchComponent', () => {
       startFight: vi.fn().mockName('startFight').mockReturnValue(of(undefined)),
       pauseFight: vi.fn().mockName('pauseFight').mockReturnValue(of(undefined)),
       resumeFight: vi.fn().mockName('resumeFight').mockReturnValue(of(undefined)),
+      adjustScore: vi.fn().mockName('adjustScore').mockReturnValue(of(undefined)),
       startOsaeKomi: vi.fn().mockName('startOsaeKomi').mockReturnValue(of(undefined)),
       stopOsaeKomi: vi.fn().mockName('stopOsaeKomi').mockReturnValue(of(undefined)),
     };
@@ -156,6 +158,7 @@ describe('MatchComponent', () => {
     startFightSpy = apiMock.startFight as Mock;
     pauseFightSpy = apiMock.pauseFight as Mock;
     resumeFightSpy = apiMock.resumeFight as Mock;
+    adjustScoreSpy = apiMock.adjustScore as Mock;
     startOsaeKomiSpy = apiMock.startOsaeKomi as Mock;
     stopOsaeKomiSpy = apiMock.stopOsaeKomi as Mock;
 
@@ -249,6 +252,54 @@ describe('MatchComponent', () => {
     fixture.destroy();
   });
 
+  it('handles the space bar for every active fight state when a score button is focused', () => {
+    const fixture = TestBed.createComponent(MatchComponent);
+    const component = fixture.componentInstance as any;
+    getTatamiQueueSpy.mockReturnValue(of({
+      current: createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }),
+      next: null,
+      onDeck: null,
+      upcoming: [],
+    } as TatamiQueue));
+    fixture.detectChanges();
+
+    const scoreButton = fixture.nativeElement.querySelector('.btn--positive') as HTMLButtonElement;
+    scoreButton.focus();
+    const startEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(startEvent);
+    expect(startFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+    expect(startEvent.defaultPrevented).toBe(true);
+
+    component.queue.set({
+      current: createFight({ status: 'Paused' }),
+      next: null,
+      onDeck: null,
+      upcoming: [],
+    });
+    const resumeEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(resumeEvent);
+    expect(resumeFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+    expect(resumeEvent.defaultPrevented).toBe(true);
+
+    component.queue.set({
+      current: createFight({ status: 'InProgress' }),
+      next: null,
+      onDeck: null,
+      upcoming: [],
+    });
+    const pauseEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(pauseEvent);
+    expect(pauseFightSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+    expect(pauseEvent.defaultPrevented).toBe(true);
+    expect(adjustScoreSpy).not.toHaveBeenCalled();
+
+    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(enterEvent);
+    expect(enterEvent.defaultPrevented).toBe(false);
+
+    fixture.destroy();
+  });
+
   it('starts and stops Osae-komi with S, F, and D without touching the fight clock', () => {
     tournamentSignal.update((tournament) => ({ ...tournament, accentSideColor: 'Red' }));
     const fixture = TestBed.createComponent(MatchComponent);
@@ -257,14 +308,22 @@ describe('MatchComponent', () => {
     getTatamiQueueSpy.mockReturnValue(of({ current: fight, next: null, onDeck: null, upcoming: [] } as TatamiQueue));
     fixture.detectChanges();
 
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' }));
+    const scoreButton = fixture.nativeElement.querySelector('.btn--positive') as HTMLButtonElement;
+    scoreButton.focus();
+    const whiteEvent = new KeyboardEvent('keydown', { key: 's', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(whiteEvent);
+    const blueEvent = new KeyboardEvent('keydown', { key: 'f', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(blueEvent);
     component.osaeKomiSide.set('white');
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }));
+    const stopEvent = new KeyboardEvent('keydown', { key: 'd', bubbles: true, cancelable: true });
+    scoreButton.dispatchEvent(stopEvent);
 
     expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'white' }, expect.any(String));
     expect(startOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', { side: 'blue' }, expect.any(String));
     expect(stopOsaeKomiSpy).toHaveBeenCalledWith('tournament-1', 'fight-1', expect.any(String));
+    expect(whiteEvent.defaultPrevented).toBe(true);
+    expect(blueEvent.defaultPrevented).toBe(true);
+    expect(stopEvent.defaultPrevented).toBe(true);
     expect(pauseFightSpy).not.toHaveBeenCalled();
     expect(resumeFightSpy).not.toHaveBeenCalled();
     fixture.destroy();
@@ -288,17 +347,31 @@ describe('MatchComponent', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
     auth.canOperate.set(true);
 
-    const input = document.createElement('input');
-    document.body.appendChild(input);
-    input.focus();
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    const editableContent = ['true', '', 'plaintext-only'].map((value) => {
+      const element = document.createElement('div');
+      element.setAttribute('contenteditable', value);
+      return element;
+    });
+    const blockedInputEvents = [
+      document.createElement('input'),
+      document.createElement('textarea'),
+      document.createElement('select'),
+      ...editableContent,
+    ].map((element) => {
+      document.body.appendChild(element);
+      element.focus();
+      const event = new KeyboardEvent('keydown', { key: ' ', cancelable: true });
+      document.dispatchEvent(event);
+      return { element, event };
+    });
 
     expect(startFightSpy).not.toHaveBeenCalled();
     expect(pauseFightSpy).not.toHaveBeenCalled();
     expect(startOsaeKomiSpy).not.toHaveBeenCalled();
     expect(stopOsaeKomiSpy).not.toHaveBeenCalled();
+    expect(blockedInputEvents.map(({ event }) => event.defaultPrevented)).toEqual([false, false, false, false, false, false]);
 
-    input.remove();
+    blockedInputEvents.forEach(({ element }) => element.remove());
     fixture.destroy();
   });
 
