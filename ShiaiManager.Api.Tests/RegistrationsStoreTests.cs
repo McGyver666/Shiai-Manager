@@ -492,6 +492,7 @@ public sealed class RegistrationsStoreTests
             CancellationToken.None);
         var store = new SqliteRegistrationsStore(ctx, NullLogger<SqliteRegistrationsStore>.Instance);
         await store.CreateAsync(tournamentId, athleteId, weightKg ?? 0m, true, CancellationToken.None);
+        // CreateAsync overwrites the athlete weight, so restore the intended (possibly missing) weight.
         await ctx.Entry(athlete).ReloadAsync();
         athlete.WeightKg = weightKg;
         await ctx.SaveChangesAsync();
@@ -566,7 +567,7 @@ public sealed class RegistrationsStoreTests
         var db = CreateDatabasePath();
         await using var ctx = CreateDbContext(db);
         await ctx.Database.EnsureCreatedAsync();
-        var (store, tournamentId, _) = await SeedU21AthleteWithMenCategoryAsync(ctx, 95.5m);
+        var (store, tournamentId, _) = await SeedU21AthleteWithMenCategoryAsync(ctx, 95.50m);
         var registration = await ctx.Registrations.SingleAsync();
         registration.StartAgeGroup = "Männer";
         await ctx.SaveChangesAsync();

@@ -435,10 +435,11 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
                     AgeGroupResolver.IsSameAgeGroup(c.AgeGroup, effectiveAgeGroup)
                     && (c.Gender == athleteGender || c.Gender == Gender.Mixed.ToString()))
                 .ToList();
+            var unlockedCategories = ageGroupCategories.Where(c => !c.IsLocked).ToList();
 
             // The category birth-year range is only a plausibility hint, so it is not used for matching.
-            var candidates = ageGroupCategories
-                .Where(c => !c.IsLocked && (c.WeightClassKg == null || (weightKg != null && weightKg <= c.WeightClassKg)))
+            var candidates = unlockedCategories
+                .Where(c => c.WeightClassKg == null || (weightKg != null && weightKg <= c.WeightClassKg))
                 // Prefer exact gender classes over mixed, then smallest fitting weight.
                 .OrderBy(c => c.Gender == athleteGender ? 0 : 1)
                 // Best fit: lowest weight class first; open weight (null) last.
@@ -447,7 +448,7 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
 
             if (candidates.Count == 0)
             {
-                var noMatch = BuildNoMatch(registration, effectiveAgeGroup, ageGroupCategories, weightKg);
+                var noMatch = BuildNoMatch(registration, effectiveAgeGroup, ageGroupCategories.Count, unlockedCategories.Count);
                 unassigned.Add(noMatch);
                 _logger.LogInformation(
                     "Athlete {AthleteId} ({LastName}, {FirstName}) could not be auto-assigned: {Reason}",
@@ -477,30 +478,31 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
     private static UnassignedAthlete BuildNoMatch(
         RegistrationRecord registration,
         string effectiveAgeGroup,
-        IReadOnlyList<CategoryRecord> ageGroupCategories,
-        decimal? weightKg)
+        int ageGroupCategoryCount,
+        int unlockedCategoryCount)
     {
         var athlete = registration.Athlete!;
         var parameters = new Dictionary<string, string> { ["ageGroup"] = effectiveAgeGroup };
         LocalizedMessage message;
-        if (ageGroupCategories.Count == 0)
+        if (ageGroupCategoryCount == 0)
         {
             message = string.IsNullOrWhiteSpace(registration.StartAgeGroup)
                 ? AgeGroupMessages.NoCategoriesForNaturalAgeGroup
                 : AgeGroupMessages.NoCategoriesForStartAgeGroup;
         }
-        else if (ageGroupCategories.All(c => c.IsLocked))
+        else if (unlockedCategoryCount == 0)
         {
             message = AgeGroupMessages.AllCategoriesLocked;
         }
-        else if (weightKg is null)
+        else if (athlete.WeightKg is not { } weightKg)
         {
             message = AgeGroupMessages.NoWeightWithoutOpenClass;
         }
         else
         {
             message = AgeGroupMessages.NoFittingWeightClass;
-            parameters["weightKg"] = weightKg.Value.ToString(CultureInfo.InvariantCulture);
+            // Same dot notation as the weights shown in the UI.
+            parameters["weightKg"] = weightKg.ToString("0.##", CultureInfo.InvariantCulture);
         }
 
         return new UnassignedAthlete(athlete.Id, athlete.FirstName, athlete.LastName, message.Format(parameters))
