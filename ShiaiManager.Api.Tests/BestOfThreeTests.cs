@@ -135,7 +135,7 @@ public sealed class BestOfThreeTests
         var match = CreateMatchService(ctx);
         Assert.Equal(MatchActionResult.Success, await match.StartAsync(bout.Id, "admin", CancellationToken.None));
         var winner = whiteWins ? bout.WhiteAthleteId : bout.BlueAthleteId;
-        Assert.Equal(MatchActionResult.Success, await match.ConfirmResultAsync(bout.Id, winner, "admin", CancellationToken.None));
+        Assert.Equal(MatchActionResult.Success, await match.ConfirmResultAsync(bout.Id, winner, null, "admin", CancellationToken.None));
     }
 
     private static async Task<EditFightResultResponse> EditWinnerAsync(Scenario s, int round, bool whiteWins, bool confirmed = false)

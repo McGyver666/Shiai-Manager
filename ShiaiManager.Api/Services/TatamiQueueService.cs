@@ -44,19 +44,19 @@ public sealed class TatamiQueueService : ITatamiQueueService
         var seriesBouts = await BestOfThreeSeries.LoadBoutsAsync(
             _dbContext, records.Select(f => f.CategoryId).OfType<Guid>(), cancellationToken);
 
-        Fight Map(FightRecord r) => MapToModel(r) with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) };
+        Fight Map(FightRecord r) =>
+            FightMapper.ToModel(r, GoldenScoreRules.IsActive(r, r.Category, DateTimeOffset.UtcNow))
+                with { Series = BestOfThreeSeries.DescribeOrNull(r, seriesBouts) };
 
-        // In-progress fights first, then ready pending fights. Pending fights honor a manual
-        // queue order (QueueOrder) when set, falling back to bracket order (Round, FightNumber).
-        var playable = records
-            .Where(IsQueueVisible)
-            .OrderBy(f => f.Status == InProgress ? 0 : f.Status == Paused ? 1 : 2)
-            .ThenBy(f => f.Status == Pending && !IsReadyToStart(f) ? 1 : 0)
+        // Running fights first, then the pending fights in manual queue order (TatamiQueueRules).
+        var running = records
+            .Where(f => f.Status == InProgress || f.Status == Paused)
+            .OrderBy(f => f.Status == InProgress ? 0 : 1)
             .ThenBy(f => f.QueueOrder ?? int.MaxValue)
             .ThenBy(f => f.Round)
-            .ThenBy(f => f.FightNumber)
-            .Select(Map)
-            .ToList();
+            .ThenBy(f => f.FightNumber);
+        var pending = TatamiQueueRules.InQueueOrder(records.Where(f => f.Status == Pending && !f.IsBye));
+        var playable = running.Concat(pending).Select(Map).ToList();
 
         return new TatamiQueue(
             tatami.Id,
@@ -66,55 +66,4 @@ public sealed class TatamiQueueService : ITatamiQueueService
             playable.ElementAtOrDefault(2),
             playable);
     }
-
-    private static bool IsQueueVisible(FightRecord f) =>
-        f.Status == InProgress
-        || f.Status == Paused
-        || (f.Status == Pending && !f.IsBye);
-
-    private static bool IsReadyToStart(FightRecord f) =>
-        f.Status == Pending
-        && !f.IsBye
-        && TatamiQueueRules.HasBothSides(f);
-
-    private static Fight MapToModel(FightRecord r) =>
-        new(r.Id,
-            r.TournamentId,
-            r.CategoryId,
-            Enum.Parse<FightBracketType>(r.BracketType),
-            r.Round,
-            r.FightNumber,
-            r.PoolNumber,
-            r.WhiteSourceFightId,
-            r.WhiteSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.WhiteSourceOutcome),
-            r.BlueSourceFightId,
-            r.BlueSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.BlueSourceOutcome),
-            r.WhiteAthleteId,
-            r.BlueAthleteId,
-            r.WinnerId,
-            r.IsBye,
-            Enum.Parse<FightStatus>(r.Status),
-            r.TatamiId,
-            r.QueueOrder,
-            r.WhiteScore,
-            r.BlueScore,
-            r.WhitePenalties,
-            r.BluePenalties,
-            r.WhiteIpponCount,
-            r.WhiteWazaAriCount,
-            r.WhiteYukoCount,
-            r.BlueIpponCount,
-            r.BlueWazaAriCount,
-            r.BlueYukoCount,
-            r.PausedAtUtc,
-            r.OsaeKomiSide,
-            r.OsaeKomiStartedAtUtc,
-            r.OsaeKomiPausedAtUtc,
-            r.OsaeKomiElapsedMilliseconds,
-            r.StartedAtUtc,
-            r.CompletedAtUtc,
-            r.CreatedAtUtc,
-            r.UpdatedAtUtc,
-            IsGoldenScore: GoldenScoreRules.IsActive(r, r.Category, DateTimeOffset.UtcNow),
-            FreeFight: FreeFightRules.DescribeOrNull(r));
 }

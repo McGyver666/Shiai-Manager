@@ -324,7 +324,7 @@ public sealed class BackupRestoreIntegrationTests : IClassFixture<BackupRestoreI
         {
             Id = Guid.NewGuid(), TournamentId = tournamentId, Kind = nameof(Models.FightKind.Free), CategoryId = null,
             BracketType = "Main", Status = "Completed", WhiteName = "Gast 1", BlueName = "Gast 2",
-            MatchDurationSeconds = 150, GoldenScoreEnabled = true, GoldenScoreDurationSeconds = 90, WinnerSide = "Blue",
+            MatchDurationSeconds = 150, GoldenScoreEnabled = true, GoldenScoreDurationSeconds = 90, WinnerSide = nameof(Models.FightSide.Blue),
             StartedAtUtc = now.AddMinutes(-3), CompletedAtUtc = now, CreatedAtUtc = now, UpdatedAtUtc = now
         };
         var backup = new TournamentBackup

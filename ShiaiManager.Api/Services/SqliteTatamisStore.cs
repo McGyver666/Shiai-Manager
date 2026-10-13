@@ -120,9 +120,16 @@ public sealed class SqliteTatamisStore : ITatamisStore
             return false;
         }
 
+        // A waiting Freikampf belongs to its tatami (ADR-0013); without it, it would be orphaned and invisible.
+        var pending = FightStatus.Pending.ToString();
+        var pendingFreeFights = await _dbContext.Fights
+            .Where(f => f.TatamiId == tatamisId && f.Kind == FreeFightRules.FreeKind && f.Status == pending)
+            .ToListAsync(cancellationToken);
+        _dbContext.Fights.RemoveRange(pendingFreeFights);
         _dbContext.Tatamis.Remove(record);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Tatami {TatamisId} deleted.", tatamisId);
+        _logger.LogInformation(
+            "Tatami {TatamisId} deleted together with {FreeFightCount} waiting Freikämpfe.", tatamisId, pendingFreeFights.Count);
         return true;
     }
 

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using ShiaiManager.Api.Models;
 using ShiaiManager.Api.Services;
 
 namespace ShiaiManager.Api.Contracts;
@@ -12,7 +13,9 @@ public sealed record FreeFightSideRequest
     public Guid? AthleteId { get; init; }
 
     /// <summary>Free-text name, e.g. "Weiß" or "Gast 1"; required when no athlete is selected.</summary>
-    [MaxLength(FreeFightRules.MaxNameLength, ErrorMessage = "Der Name darf maximal 60 Zeichen lang sein.")]
+    [MaxLength(FreeFightDetails.MaxNameLength, ErrorMessage = "Der Name darf maximal {1} Zeichen lang sein.")]
+    // Control and invisible format characters (e.g. bidi overrides) would garble the scoreboard.
+    [RegularExpression(@"^[^\p{Cc}\p{Cf}]*$", ErrorMessage = "Der Name enthält unzulässige Steuerzeichen.")]
     public string? Name { get; init; }
 
     /// <summary>Maps the request to the service input.</summary>
@@ -45,7 +48,7 @@ public record FreeFightRequest
 
     /// <summary>Maps the request to the service input.</summary>
     public FreeFightInput ToInput() =>
-        new(White!.ToInput(), Blue!.ToInput(), MatchDurationSeconds, GoldenScoreEnabled, GoldenScoreDurationSeconds);
+        new(White!.ToInput(), Blue!.ToInput(), new FightTiming(MatchDurationSeconds, GoldenScoreEnabled, GoldenScoreDurationSeconds));
 }
 
 /// <summary>

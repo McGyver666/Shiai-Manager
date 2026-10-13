@@ -104,7 +104,7 @@ public sealed class CompletedFightsServiceTests
         var freeFight = CompletedFight(tid, cid, athletes[1], athletes[0], athletes[1], tatamiId, now);
         freeFight.Kind = nameof(FightKind.Free);
         freeFight.CategoryId = null;
-        freeFight.WinnerSide = "White";
+        freeFight.WinnerSide = nameof(FightSide.White);
         ctx.Fights.AddRange(official, freeFight);
         await ctx.SaveChangesAsync();
 

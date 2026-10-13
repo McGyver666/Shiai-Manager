@@ -133,6 +133,7 @@ describe('DisplayComponent', () => {
             serverTimeSync$: serverTimeSync.asObservable(),
             reconnected$: reconnected.asObservable(),
             categoryFightsUpdated$: new Subject().asObservable(),
+            tatamiQueueChanged$: new Subject().asObservable(),
           },
         },
         {

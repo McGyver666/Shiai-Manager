@@ -759,7 +759,7 @@ public sealed class RankingServiceTests
                 Id = Guid.NewGuid(), TournamentId = tid, CategoryId = null, Kind = nameof(FightKind.Free),
                 BracketType = FightBracketType.Main.ToString(), Status = FightStatus.Completed.ToString(),
                 WhiteAthleteId = athleteIds[0], BlueAthleteId = athleteIds[1],
-                WinnerId = athleteIds[1], WinnerSide = "Blue",
+                WinnerId = athleteIds[1], WinnerSide = nameof(FightSide.Blue),
                 CreatedAtUtc = now, UpdatedAtUtc = now,
             },
             new FightRecord
@@ -783,10 +783,10 @@ public sealed class RankingServiceTests
         Assert.Equivalent(medalsBefore, medalsAfter, strict: true);
     }
 
-    private static FightRecord MakeRRFight(
-        Guid tournamentId, Guid categoryId,
     // ─── Round-robin standings tests ──────────────────────────────────────────
 
+    private static FightRecord MakeRRFight(
+        Guid tournamentId, Guid categoryId,
         Guid red, Guid blue,
         Guid winner,
         int redWazaAri = 0, int blueWazaAri = 0,

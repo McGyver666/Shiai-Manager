@@ -70,6 +70,9 @@ namespace ShiaiManager.Api.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Freikämpfe have no category and cannot exist in the old schema.
+            migrationBuilder.Sql("DELETE FROM \"Fights\" WHERE \"Kind\" = 'Free';");
+
             migrationBuilder.DropColumn(
                 name: "BlueName",
                 table: "Fights");
@@ -103,7 +106,6 @@ namespace ShiaiManager.Api.Migrations
                 table: "Fights",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"),
                 oldClrType: typeof(Guid),
                 oldType: "TEXT",
                 oldNullable: true);

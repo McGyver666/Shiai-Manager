@@ -42,6 +42,12 @@ public sealed class FreeFightService : IFreeFightService
     }
 
     /// <inheritdoc />
+    public async Task<Fight?> GetAsync(Guid tournamentId, Guid fightId, CancellationToken cancellationToken) =>
+        await FindFreeFightAsync(tournamentId, fightId, cancellationToken) is null
+            ? null
+            : await _fightsStore.GetByIdAsync(fightId, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<FreeFightResult> CreateAsync(
         Guid tournamentId,
         Guid tatamiId,
@@ -74,8 +80,10 @@ public sealed class FreeFightService : IFreeFightService
         };
         Apply(fight, input);
 
+        // The whole pending queue, including fights whose sides are still open, is renumbered so that
+        // "at the end" stays behind them once their sides are known.
         var ordered = TatamiQueueRules.InQueueOrder(
-            await TatamiQueueRules.ReadyPending(_dbContext.Fights, tournamentId, tatamiId).ToListAsync(cancellationToken));
+            await TatamiQueueRules.PendingOnTatami(_dbContext.Fights, tournamentId, tatamiId).ToListAsync(cancellationToken));
         var insertIndex = ordered.Count;
         if (placeNext)
         {
@@ -83,8 +91,9 @@ public sealed class FreeFightService : IFreeFightService
                 f => f.TournamentId == tournamentId && f.TatamiId == tatamiId
                     && (f.Status == InProgress || f.Status == Paused),
                 cancellationToken);
-            // Without a running fight the first pending fight is the current one and keeps its place.
-            insertIndex = fightIsRunning ? 0 : Math.Min(1, ordered.Count);
+            // Without a running fight the first start-ready fight is the current one and keeps its place.
+            var readyCount = ordered.Count(TatamiQueueRules.HasBothSides);
+            insertIndex = fightIsRunning ? 0 : Math.Min(1, readyCount);
         }
 
         ordered.Insert(insertIndex, fight);
@@ -145,9 +154,8 @@ public sealed class FreeFightService : IFreeFightService
         await _auditLog.LogAsync(
             tournamentId, user, "FreeFightDeleted", "Fight", fight.Id, $"TatamiId={fight.TatamiId}", cancellationToken);
 
-        // The fight no longer exists, so clients are told to reload their tatami queues.
         _ = _hub.Clients.Group(tournamentId.ToString())
-            .SendAsync("CategoryFightsUpdated", new { tournamentId, categoryId = (Guid?)null }, CancellationToken.None);
+            .SendAsync("TatamiQueueChanged", new { tournamentId, tatamiId = fight.TatamiId }, CancellationToken.None);
 
         return new(FreeFightResultStatus.Success);
     }
@@ -182,9 +190,9 @@ public sealed class FreeFightService : IFreeFightService
         fight.WhiteName = input.White.AthleteId is null ? input.White.Name!.Trim() : null;
         fight.BlueAthleteId = input.Blue.AthleteId;
         fight.BlueName = input.Blue.AthleteId is null ? input.Blue.Name!.Trim() : null;
-        fight.MatchDurationSeconds = input.MatchDurationSeconds;
-        fight.GoldenScoreEnabled = input.GoldenScoreEnabled;
-        fight.GoldenScoreDurationSeconds = input.GoldenScoreDurationSeconds;
+        fight.MatchDurationSeconds = input.Timing.MatchDurationSeconds;
+        fight.GoldenScoreEnabled = input.Timing.GoldenScoreEnabled;
+        fight.GoldenScoreDurationSeconds = input.Timing.GoldenScoreDurationSeconds;
     }
 
     // Free-text names are not logged: they may contain personal data.

@@ -852,7 +852,7 @@ public sealed class MatchServiceTests
         {
             var svc = CreateService(ctx);
             await svc.StartAsync(final.Id, "Tisch1", CancellationToken.None);
-            var result = await svc.ConfirmResultAsync(final.Id, winner, "Tisch1", CancellationToken.None);
+            var result = await svc.ConfirmResultAsync(final.Id, winner, null, "Tisch1", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
@@ -891,7 +891,7 @@ public sealed class MatchServiceTests
             trackedFight.StartedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-95);
             await ctx.SaveChangesAsync();
 
-            var result = await svc.ConfirmResultAsync(final.Id, whiteAthleteId, "Tisch1", CancellationToken.None);
+            var result = await svc.ConfirmResultAsync(final.Id, whiteAthleteId, null, "Tisch1", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
@@ -924,7 +924,7 @@ public sealed class MatchServiceTests
         await using var ctx2 = CreateDbContext(db);
         var svc = CreateService(ctx2);
         await svc.StartAsync(final.Id, "Tisch1", CancellationToken.None);
-        var result = await svc.ConfirmResultAsync(final.Id, Guid.NewGuid(), "Tisch1", CancellationToken.None);
+        var result = await svc.ConfirmResultAsync(final.Id, Guid.NewGuid(), null, "Tisch1", CancellationToken.None);
         Assert.Equal(MatchActionResult.WinnerNotParticipant, result);
     }
 
@@ -945,7 +945,7 @@ public sealed class MatchServiceTests
         await using var ctx2 = CreateDbContext(db);
         var svc = CreateService(ctx2);
         await svc.StartAsync(fight.Id, "Tisch1", CancellationToken.None);
-        var result = await svc.ConfirmResultAsync(fight.Id, null, "Tisch1", CancellationToken.None);
+        var result = await svc.ConfirmResultAsync(fight.Id, null, null, "Tisch1", CancellationToken.None);
 
         Assert.Equal(MatchActionResult.WinnerNotParticipant, result);
     }
@@ -971,7 +971,7 @@ public sealed class MatchServiceTests
         {
             var svc = CreateService(ctx);
             await svc.StartAsync(fight.Id, "Tisch1", CancellationToken.None);
-            var result = await svc.ConfirmResultAsync(fight.Id, null, "Tisch1", CancellationToken.None);
+            var result = await svc.ConfirmResultAsync(fight.Id, null, null, "Tisch1", CancellationToken.None);
 
             Assert.Equal(MatchActionResult.Success, result);
         }
@@ -1003,9 +1003,9 @@ public sealed class MatchServiceTests
         {
             var svc = CreateService(ctx);
             await svc.StartAsync(sf1.Id, "T1", CancellationToken.None);
-            await svc.ConfirmResultAsync(sf1.Id, winner1, "T1", CancellationToken.None);
+            await svc.ConfirmResultAsync(sf1.Id, winner1, null, "T1", CancellationToken.None);
             await svc.StartAsync(sf2.Id, "T1", CancellationToken.None);
-            await svc.ConfirmResultAsync(sf2.Id, winner2, "T1", CancellationToken.None);
+            await svc.ConfirmResultAsync(sf2.Id, winner2, null, "T1", CancellationToken.None);
         }
 
         var final = MainFight(await ReadFightsAsync(db, cid), 2, 1);
@@ -1051,7 +1051,7 @@ public sealed class MatchServiceTests
         {
             var service = CreateService(ctx);
             await service.StartAsync(target.WhiteSource.Id, "T1", CancellationToken.None);
-            var result = await service.ConfirmResultAsync(target.WhiteSource.Id, chosenWinner, "T1", CancellationToken.None);
+            var result = await service.ConfirmResultAsync(target.WhiteSource.Id, chosenWinner, null, "T1", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
@@ -1112,7 +1112,7 @@ public sealed class MatchServiceTests
         {
             var service = CreateService(ctx);
             await service.StartAsync(target.WhiteSource.Id, "T1", CancellationToken.None);
-            var result = await service.ConfirmResultAsync(target.WhiteSource.Id, chosenWinner, "T1", CancellationToken.None);
+            var result = await service.ConfirmResultAsync(target.WhiteSource.Id, chosenWinner, null, "T1", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
@@ -1163,12 +1163,12 @@ public sealed class MatchServiceTests
             await service.StartAsync(target.WhiteSource.Id, "T1", CancellationToken.None);
             Assert.Equal(
                 MatchActionResult.Success,
-                await service.ConfirmResultAsync(target.WhiteSource.Id, whiteWinner, "T1", CancellationToken.None));
+                await service.ConfirmResultAsync(target.WhiteSource.Id, whiteWinner, null, "T1", CancellationToken.None));
 
             await service.StartAsync(target.BlueSource.Id, "T1", CancellationToken.None);
             Assert.Equal(
                 MatchActionResult.Success,
-                await service.ConfirmResultAsync(target.BlueSource.Id, blueWinner, "T1", CancellationToken.None));
+                await service.ConfirmResultAsync(target.BlueSource.Id, blueWinner, null, "T1", CancellationToken.None));
         }
 
         var updatedTarget = (await ReadFightsAsync(db, cid)).Single(fight => fight.Id == target.Fight.Id);
@@ -1204,7 +1204,7 @@ public sealed class MatchServiceTests
         {
             var svc = CreateService(ctx);
             await svc.StartAsync(fightToConfirm.Id, "T1", CancellationToken.None);
-            var result = await svc.ConfirmResultAsync(fightToConfirm.Id, winner, "T1", CancellationToken.None);
+            var result = await svc.ConfirmResultAsync(fightToConfirm.Id, winner, null, "T1", CancellationToken.None);
             Assert.Equal(MatchActionResult.Success, result);
         }
 
@@ -1242,9 +1242,9 @@ public sealed class MatchServiceTests
         {
             var svc = CreateService(ctx);
             await svc.StartAsync(sf1.Id, "T1", CancellationToken.None);
-            await svc.ConfirmResultAsync(sf1.Id, winner1, "T1", CancellationToken.None);
+            await svc.ConfirmResultAsync(sf1.Id, winner1, null, "T1", CancellationToken.None);
             await svc.StartAsync(sf2.Id, "T1", CancellationToken.None);
-            await svc.ConfirmResultAsync(sf2.Id, winner2, "T1", CancellationToken.None);
+            await svc.ConfirmResultAsync(sf2.Id, winner2, null, "T1", CancellationToken.None);
         }
 
         var repechage = (await ReadFightsAsync(db, cid))

@@ -33,6 +33,8 @@ export type TeamMatchdayProfile = 'SeniorMen' | 'SeniorWomen' | 'U16Boys' | 'U16
 
 /** Side designation used by the match API. */
 export type FightSide = 'white' | 'blue';
+/** Side as the API names it in results (server enum FightSide). */
+export type WinningSide = 'White' | 'Blue';
 
 /** Whether a fight belongs to the main bracket, the repechage, or a round-robin group stage. */
 export type FightBracketType = 'Main' | 'Repechage' | 'GroupStage';
@@ -461,7 +463,7 @@ export interface FreeFightDetails {
   matchDurationSeconds: number;
   goldenScoreEnabled: boolean;
   goldenScoreDurationSeconds: number;
-  winnerSide: 'White' | 'Blue' | null;
+  winnerSide: WinningSide | null;
 }
 
 export interface Fight {
@@ -626,9 +628,10 @@ export interface OsaeKomiRequest {
 }
 
 export interface ConfirmResultRequest {
+  /** Winning athlete of a regular fight; null records a Hiki-wake (team matchday). */
   winnerId: string | null;
-  /** Winning side of a Freikampf; takes precedence over winnerId. */
-  winnerSide?: FightSide | null;
+  /** Winning side of a Freikampf; null records a Hiki-wake. */
+  winnerSide?: WinningSide | null;
 }
 
 /** One side of a Freikampf: an athlete of the tournament or a free-text name. */

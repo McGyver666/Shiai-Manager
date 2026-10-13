@@ -25,7 +25,7 @@ public sealed class FreeFightServiceTests
         int matchDurationSeconds = 240,
         bool goldenScoreEnabled = false,
         int goldenScoreDurationSeconds = 180) =>
-        new(white ?? WhiteGuest, blue ?? BlueGuest, matchDurationSeconds, goldenScoreEnabled, goldenScoreDurationSeconds);
+        new(white ?? WhiteGuest, blue ?? BlueGuest, new FightTiming(matchDurationSeconds, goldenScoreEnabled, goldenScoreDurationSeconds));
 
     private sealed record Seeded(string Db, Guid TournamentId, Guid CategoryId, Guid TatamiId, List<Guid> AthleteIds, List<FightRecord> RoundOne);
 
@@ -155,6 +155,33 @@ public sealed class FreeFightServiceTests
         Assert.Null(created.CategoryId);
         Assert.Equal(FightStatus.Pending, created.Status);
         Assert.Equal(new FreeFightDetails("Weiß", "Blau", 240, false, 180, null), created.FreeFight);
+    }
+
+    [Fact]
+    public async Task Create_AtTheEnd_StaysBehindFightsWhoseSidesAreStillOpen()
+    {
+        var seeded = await SeedAsync();
+        Guid finalId;
+        await using (var ctx = CreateDbContext(seeded.Db))
+        {
+            finalId = (await ctx.Fights.SingleAsync(f => f.CategoryId == seeded.CategoryId && f.Round == 2)).Id;
+            await CreateMatchService(ctx).AssignTatamiAsync(finalId, seeded.TatamiId, "Admin", CancellationToken.None);
+        }
+
+        var created = (await CreateAsync(seeded, Input())).Fight!;
+        Assert.Equal(
+            [seeded.RoundOne[0].Id, seeded.RoundOne[1].Id, created.Id, finalId],
+            (await QueueAsync(seeded)).Upcoming.Select(f => f.Id));
+
+        foreach (var fight in seeded.RoundOne)
+        {
+            await using var ctx = CreateDbContext(seeded.Db);
+            var match = CreateMatchService(ctx);
+            await match.StartAsync(fight.Id, "Tisch1", CancellationToken.None);
+            await match.ConfirmResultAsync(fight.Id, fight.WhiteAthleteId, null, "Tisch1", CancellationToken.None);
+        }
+
+        Assert.Equal([finalId, created.Id], (await QueueAsync(seeded)).Upcoming.Select(f => f.Id));
     }
 
     [Fact]
@@ -299,6 +326,9 @@ public sealed class FreeFightServiceTests
         Assert.Equal(FreeFightResultStatus.Success, result.Status);
         Assert.Equal(seeded.AthleteIds[2], result.Fight!.BlueAthleteId);
         Assert.Equal(new FreeFightDetails("Weiß", null, 120, true, 180, null), result.Fight.FreeFight);
+        var entry = await ctx.AuditLogs.SingleAsync(a => a.Action == "FreeFightUpdated");
+        Assert.Equal(created.Id, entry.EntityId);
+        Assert.Equal("Tisch1", entry.User);
     }
 
     [Fact]
@@ -427,9 +457,9 @@ public sealed class FreeFightServiceTests
     }
 
     [Theory]
-    [InlineData("white", "White")]
-    [InlineData("Blue", "Blue")]
-    public async Task ConfirmBySide_CompletesFreikampfWithWinningSide(string side, string expectedSide)
+    [InlineData(FightSide.White)]
+    [InlineData(FightSide.Blue)]
+    public async Task ConfirmBySide_CompletesFreikampfWithWinningSide(FightSide side)
     {
         var seeded = await SeedAsync();
         var created = await CreateAndStartAsync(seeded, Input());
@@ -437,13 +467,16 @@ public sealed class FreeFightServiceTests
         await using (var ctx = CreateDbContext(seeded.Db))
         {
             Assert.Equal(MatchActionResult.Success,
-                await CreateMatchService(ctx).ConfirmResultBySideAsync(created.Id, side, "Tisch1", CancellationToken.None));
+                await CreateMatchService(ctx).ConfirmResultAsync(created.Id, null, side, "Tisch1", CancellationToken.None));
         }
 
         var completed = await ReadFightAsync(seeded, created.Id);
         Assert.Equal(FightStatus.Completed.ToString(), completed.Status);
-        Assert.Equal(expectedSide, completed.WinnerSide);
+        Assert.Equal(side.ToString(), completed.WinnerSide);
         Assert.Null(completed.WinnerId);
+        await using var verifyCtx = CreateDbContext(seeded.Db);
+        var entry = await verifyCtx.AuditLogs.SingleAsync(a => a.Action == "ResultConfirmed" && a.EntityId == created.Id);
+        Assert.Contains($"WinnerSide={side}", entry.Details);
     }
 
     [Fact]
@@ -455,23 +488,12 @@ public sealed class FreeFightServiceTests
         await using (var ctx = CreateDbContext(seeded.Db))
         {
             Assert.Equal(MatchActionResult.Success,
-                await CreateMatchService(ctx).ConfirmResultBySideAsync(created.Id, null, "Tisch1", CancellationToken.None));
+                await CreateMatchService(ctx).ConfirmResultAsync(created.Id, null, null, "Tisch1", CancellationToken.None));
         }
 
         var completed = await ReadFightAsync(seeded, created.Id);
         Assert.Equal(FightStatus.Completed.ToString(), completed.Status);
         Assert.Null(completed.WinnerSide);
-    }
-
-    [Fact]
-    public async Task ConfirmBySide_UnknownSide_IsRejected()
-    {
-        var seeded = await SeedAsync();
-        var created = await CreateAndStartAsync(seeded, Input());
-
-        await using var ctx = CreateDbContext(seeded.Db);
-        Assert.Equal(MatchActionResult.WinnerNotParticipant,
-            await CreateMatchService(ctx).ConfirmResultBySideAsync(created.Id, "red", "Tisch1", CancellationToken.None));
     }
 
     [Fact]
@@ -482,25 +504,23 @@ public sealed class FreeFightServiceTests
         var match = CreateMatchService(ctx);
         await match.StartAsync(seeded.RoundOne[0].Id, "Tisch1", CancellationToken.None);
 
-        Assert.Equal(MatchActionResult.InvalidState,
-            await match.ConfirmResultBySideAsync(seeded.RoundOne[0].Id, "white", "Tisch1", CancellationToken.None));
+        Assert.Equal(MatchActionResult.WinnerNotParticipant,
+            await match.ConfirmResultAsync(seeded.RoundOne[0].Id, null, FightSide.White, "Tisch1", CancellationToken.None));
     }
 
     [Fact]
-    public async Task ConfirmByAthlete_FreikampfWithSelectedAthlete_RecordsTheAthletesSide()
+    public async Task ConfirmByAthlete_Freikampf_IsRejectedBecauseItIsDecidedPerSide()
     {
         var seeded = await SeedAsync();
         var created = await CreateAndStartAsync(seeded, Input(blue: new FreeFightSideInput(seeded.AthleteIds[1], null)));
 
         await using (var ctx = CreateDbContext(seeded.Db))
         {
-            Assert.Equal(MatchActionResult.Success,
-                await CreateMatchService(ctx).ConfirmResultAsync(created.Id, seeded.AthleteIds[1], "Tisch1", CancellationToken.None));
+            Assert.Equal(MatchActionResult.WinnerNotParticipant,
+                await CreateMatchService(ctx).ConfirmResultAsync(created.Id, seeded.AthleteIds[1], null, "Tisch1", CancellationToken.None));
         }
 
-        var completed = await ReadFightAsync(seeded, created.Id);
-        Assert.Equal("Blue", completed.WinnerSide);
-        Assert.Null(completed.WinnerId);
+        Assert.Equal(FightStatus.InProgress.ToString(), (await ReadFightAsync(seeded, created.Id)).Status);
     }
 
     [Fact]
@@ -511,7 +531,7 @@ public sealed class FreeFightServiceTests
 
         await using (var ctx = CreateDbContext(seeded.Db))
         {
-            await CreateMatchService(ctx).ConfirmResultBySideAsync(created.Id, "blue", "Tisch1", CancellationToken.None);
+            await CreateMatchService(ctx).ConfirmResultAsync(created.Id, null, FightSide.Blue, "Tisch1", CancellationToken.None);
         }
 
         await using var verifyCtx = CreateDbContext(seeded.Db);
@@ -535,7 +555,7 @@ public sealed class FreeFightServiceTests
 
         await using (var ctx = CreateDbContext(seeded.Db))
         {
-            await CreateMatchService(ctx).ConfirmResultAsync(created.Id, seeded.AthleteIds[0], "Tisch1", CancellationToken.None);
+            await CreateMatchService(ctx).ConfirmResultAsync(created.Id, null, FightSide.White, "Tisch1", CancellationToken.None);
         }
 
         await using var verifyCtx = CreateDbContext(seeded.Db);
@@ -552,7 +572,7 @@ public sealed class FreeFightServiceTests
             blue: new FreeFightSideInput(seeded.AthleteIds[1], null)));
         await using var ctx = CreateDbContext(seeded.Db);
         var match = CreateMatchService(ctx);
-        await match.ConfirmResultBySideAsync(created.Id, "white", "Tisch1", CancellationToken.None);
+        await match.ConfirmResultAsync(created.Id, null, FightSide.White, "Tisch1", CancellationToken.None);
 
         var result = await match.EditResultAsync(
             created.Id,
@@ -561,5 +581,119 @@ public sealed class FreeFightServiceTests
             CancellationToken.None);
 
         Assert.Equal(EditResultStatus.InvalidState, result.Status);
+    }
+
+    [Fact]
+    public async Task FightLists_AreIdenticalWithAndWithoutACompletedFreikampf()
+    {
+        var seeded = await SeedAsync();
+        async Task<IReadOnlyList<Fight>> CategoryFightsAsync()
+        {
+            await using var ctx = CreateDbContext(seeded.Db);
+            // Backs the printed lists, the public match list and the guest share.
+            var fights = await new SqliteFightsStore(ctx, NullLogger<SqliteFightsStore>.Instance)
+                .GetAllAsync(seeded.TournamentId, seeded.CategoryId, CancellationToken.None);
+            // Queueing the Freikampf renumbers the tatami queue; that position is not part of the lists.
+            return fights.Select(f => f with { QueueOrder = null, UpdatedAtUtc = default }).ToList();
+        }
+
+        var before = await CategoryFightsAsync();
+        var created = await CreateAndStartAsync(seeded, Input(
+            white: new FreeFightSideInput(seeded.AthleteIds[0], null),
+            blue: new FreeFightSideInput(seeded.AthleteIds[1], null)));
+        await using (var ctx = CreateDbContext(seeded.Db))
+        {
+            await CreateMatchService(ctx).ConfirmResultAsync(created.Id, null, FightSide.White, "Tisch1", CancellationToken.None);
+        }
+
+        Assert.Equivalent(before, await CategoryFightsAsync(), strict: true);
+    }
+
+    [Fact]
+    public async Task Confirm_FreikampfInTeamMatchday_LeavesTheEncounterStandingUnchanged()
+    {
+        var seeded = await SeedAsync(CompetitionMode.TeamMatchday);
+        var bout = seeded.RoundOne[0];
+        Guid encounterId;
+        await using (var ctx = CreateDbContext(seeded.Db))
+        {
+            var tournament = await ctx.Tournaments.SingleAsync(t => t.Id == seeded.TournamentId);
+            tournament.TeamMatchdayProfile = TeamMatchdayProfile.SeniorMen.ToString();
+            await ctx.SaveChangesAsync();
+            var clubId = await ctx.Clubs.Where(c => c.TournamentId == seeded.TournamentId).Select(c => c.Id).SingleAsync();
+            var store = new SqliteTeamMatchdayStore(ctx, new TeamMatchdayRules());
+            var home = await store.AddTeamAsync(seeded.TournamentId, clubId, "JC Test I", CancellationToken.None);
+            var away = await store.AddTeamAsync(seeded.TournamentId, clubId, "JC Test II", CancellationToken.None);
+            encounterId = (await store.CreateEncounterAsync(
+                seeded.TournamentId, home!.Id, away!.Id, seeded.TatamiId, CancellationToken.None))!.Id;
+            ctx.EncounterBouts.Add(new EncounterBoutRecord
+            {
+                Id = Guid.NewGuid(), EncounterId = encounterId, LegNumber = 1, WeightClassIndex = 0, FightId = bout.Id,
+            });
+            await ctx.SaveChangesAsync();
+
+            var match = CreateMatchService(ctx);
+            await match.StartAsync(bout.Id, "Tisch1", CancellationToken.None);
+            await match.ConfirmResultAsync(bout.Id, bout.WhiteAthleteId, null, "Tisch1", CancellationToken.None);
+        }
+
+        async Task<TeamEncounter> EncounterAsync()
+        {
+            await using var ctx = CreateDbContext(seeded.Db);
+            var matchday = await new SqliteTeamMatchdayStore(ctx, new TeamMatchdayRules())
+                .GetAsync(seeded.TournamentId, CancellationToken.None);
+            return matchday!.Encounters.Single(e => e.Id == encounterId);
+        }
+
+        var before = await EncounterAsync();
+        var created = await CreateAndStartAsync(seeded, Input(
+            white: new FreeFightSideInput(bout.WhiteAthleteId, null),
+            blue: new FreeFightSideInput(bout.BlueAthleteId, null)));
+        await using (var ctx = CreateDbContext(seeded.Db))
+        {
+            Assert.Equal(MatchActionResult.Success,
+                await CreateMatchService(ctx).ConfirmResultAsync(created.Id, null, FightSide.Blue, "Tisch1", CancellationToken.None));
+        }
+
+        Assert.Equal(1, before.HomeIndividualWins);
+        Assert.Equivalent(before, await EncounterAsync(), strict: true);
+    }
+
+    [Fact]
+    public async Task AssignTatami_Freikampf_CannotBeMovedToAnotherTatamiOrUnassigned()
+    {
+        var seeded = await SeedAsync();
+        var created = (await CreateAsync(seeded, Input())).Fight!;
+
+        await using var ctx = CreateDbContext(seeded.Db);
+        var otherTatami = await new SqliteTatamisStore(ctx, NullLogger<SqliteTatamisStore>.Instance)
+            .CreateAsync(seeded.TournamentId, "Tatami 2", 1, CancellationToken.None);
+        var match = CreateMatchService(ctx);
+
+        Assert.Equal(MatchActionResult.InvalidState,
+            await match.AssignTatamiAsync(created.Id, otherTatami.Id, "Admin", CancellationToken.None));
+        Assert.Equal(MatchActionResult.InvalidState,
+            await match.AssignTatamiAsync(created.Id, null, "Admin", CancellationToken.None));
+        Assert.Equal(MatchActionResult.InvalidState,
+            await match.AssignTatamiBulkAsync(
+                seeded.TournamentId,
+                [new BulkTatamiAssignment { FightId = created.Id, TatamiId = otherTatami.Id }],
+                "Admin",
+                CancellationToken.None));
+        Assert.Equal(seeded.TatamiId, (await ReadFightAsync(seeded, created.Id)).TatamiId);
+    }
+
+    [Fact]
+    public async Task DeleteTatami_RemovesItsWaitingFreikaempfe()
+    {
+        var seeded = await SeedAsync();
+        var created = (await CreateAsync(seeded, Input())).Fight!;
+
+        await using var ctx = CreateDbContext(seeded.Db);
+        Assert.True(await new SqliteTatamisStore(ctx, NullLogger<SqliteTatamisStore>.Instance)
+            .DeleteAsync(seeded.TatamiId, CancellationToken.None));
+
+        Assert.False(await ctx.Fights.AnyAsync(f => f.Id == created.Id));
+        Assert.True(await ctx.Fights.AnyAsync(f => f.Id == seeded.RoundOne[0].Id && f.TatamiId == null));
     }
 }

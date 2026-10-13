@@ -1,0 +1,60 @@
+<div class="free-fight-backdrop" (click)="cancel()"></div>
+<section class="free-fight-dialog" role="dialog" aria-modal="true" aria-labelledby="free-fight-title">
+  <h2 id="free-fight-title">{{ (fight() ? 'freeFight.editTitle' : 'freeFight.createTitle') | t }}</h2>
+
+  @for (sideForm of sides; track sideForm.side) {
+    <fieldset class="free-fight-dialog__side" [class.free-fight-dialog__side--accent]="sideForm.side === 'blue'">
+      <legend>{{ sideLabelKey(sideForm.side) | t }}</legend>
+      <label>
+        <span>{{ 'freeFight.participant' | t }}</span>
+        <select [(ngModel)]="sideForm.athleteId" [name]="sideForm.side + 'Athlete'" [attr.data-side]="sideForm.side">
+          <option value="">{{ 'freeFight.freeText' | t }}</option>
+          @for (athlete of athleteOptions(); track athlete.id) {
+            <option [value]="athlete.id">{{ athlete.lastName }}, {{ athlete.firstName }}</option>
+          }
+        </select>
+      </label>
+      @if (!sideForm.athleteId) {
+        <label>
+          <span>{{ 'freeFight.name' | t }}</span>
+          <input type="text" [maxlength]="maxNameLength" [(ngModel)]="sideForm.name" [name]="sideForm.side + 'Name'" [attr.data-side]="sideForm.side" />
+        </label>
+      }
+    </fieldset>
+  }
+
+  <div class="free-fight-dialog__times">
+    <label>
+      <span>{{ 'freeFight.matchDuration' | t }}</span>
+      <input type="text" inputmode="numeric" placeholder="m:ss" [(ngModel)]="matchDuration" name="freeFightDuration" />
+    </label>
+    <label class="free-fight-dialog__check">
+      <input type="checkbox" [(ngModel)]="goldenScoreEnabled" name="freeFightGoldenScore" />
+      <span>{{ 'freeFight.goldenScoreEnabled' | t }}</span>
+    </label>
+    @if (goldenScoreEnabled) {
+      <label>
+        <span>{{ 'freeFight.goldenScoreDuration' | t }}</span>
+        <input type="text" inputmode="numeric" placeholder="m:ss" [(ngModel)]="goldenScoreDuration" name="freeFightGoldenScoreDuration" />
+      </label>
+    }
+    @if (!fight()) {
+      <label class="free-fight-dialog__check">
+        <input type="checkbox" [(ngModel)]="placeNext" name="freeFightPlaceNext" />
+        <span>{{ 'freeFight.placeNext' | t }}</span>
+      </label>
+    }
+  </div>
+
+  @for (name of restWarnings(); track name) {
+    <p class="free-fight-dialog__warning" role="status">{{ 'freeFight.restWarning' | t: { name: name } }}</p>
+  }
+  @if (error(); as message) {
+    <p class="free-fight-dialog__error" role="alert">{{ message }}</p>
+  }
+
+  <div class="free-fight-dialog__actions">
+    <button class="btn btn--secondary" type="button" [disabled]="saving()" (click)="cancel()">{{ 'common.cancel' | t }}</button>
+    <button class="btn btn--primary" type="button" [disabled]="saving()" (click)="save()">{{ 'common.save' | t }}</button>
+  </div>
+</section>

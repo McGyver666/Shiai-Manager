@@ -16,6 +16,9 @@ public sealed class FightRecord
     /// <summary>Fight kind stored as <see cref="Models.FightKind"/> member name.</summary>
     public string Kind { get; set; } = nameof(Models.FightKind.Regular);
 
+    /// <summary>True for a Freikampf (ADR-0013); not mapped to a column.</summary>
+    public bool IsFree => Kind == nameof(Models.FightKind.Free);
+
     /// <summary>Category this fight belongs to; null for a Freikampf (ADR-0013).</summary>
     public Guid? CategoryId { get; set; }
 
@@ -67,7 +70,7 @@ public sealed class FightRecord
     /// <summary>Golden score duration of a Freikampf in seconds; null for regular fights.</summary>
     public int? GoldenScoreDurationSeconds { get; set; }
 
-    /// <summary>Winning side of a Freikampf ("White" or "Blue"); null until completed or for Hikiwake.</summary>
+    /// <summary>Winning side of a Freikampf as <see cref="Models.FightSide"/> member name; null until completed or for Hikiwake.</summary>
     public string? WinnerSide { get; set; }
 
     /// <summary>True when one slot is a bye; the other athlete auto-advances.</summary>

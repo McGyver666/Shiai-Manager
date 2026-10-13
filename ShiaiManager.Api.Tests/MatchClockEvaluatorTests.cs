@@ -179,6 +179,16 @@ public sealed class MatchClockEvaluatorTests
 
     [Fact]
     [Trait("Category", "UnitTest")]
+    public async Task EvaluateOnceAsync_TiedFreikampfAfterItsGoldenScore_Pauses()
+    {
+        // Fight time 3 s plus golden score 60 s have both elapsed.
+        var update = Assert.Single(await EvaluateRunningFreikampfAsync(elapsedSeconds: 70, matchDurationSeconds: 3, goldenScoreEnabled: true));
+
+        Assert.Equal(FightStatus.Paused, update.Fight.Status);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
     public async Task EvaluateOnceAsync_TiedFightEntersGoldenScore_BroadcastsGoldenScoreOnce()
     {
         var dbPath = CreateDatabasePath();

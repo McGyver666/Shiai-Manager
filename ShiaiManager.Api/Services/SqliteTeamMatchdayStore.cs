@@ -358,10 +358,16 @@ public sealed class SqliteTeamMatchdayStore : ITeamMatchdayStore
         }
 
         var categories = await EnsureProfileCategoriesAsync(tournamentId, ruleProfile, cancellationToken);
-        var nextFightNumbers = await _dbContext.Fights
+        var lastFightNumbers = await _dbContext.Fights
             .Where(x => x.CategoryId != null && categories.Values.Contains(x.CategoryId.Value))
-            .GroupBy(x => x.CategoryId!.Value)
-            .ToDictionaryAsync(x => x.Key, x => x.Max(y => y.FightNumber), cancellationToken);
+            .GroupBy(x => x.CategoryId)
+            .Select(x => new { CategoryId = x.Key, LastFightNumber = x.Max(y => y.FightNumber) })
+            .ToListAsync(cancellationToken);
+        var nextFightNumbers = new Dictionary<Guid, int>();
+        foreach (var entry in lastFightNumbers)
+        {
+            if (entry.CategoryId is { } categoryId) nextFightNumbers[categoryId] = entry.LastFightNumber;
+        }
         var now = DateTimeOffset.UtcNow;
         var records = new List<EncounterBoutRecord>(order.Count);
         foreach (var weightClassIndex in order)

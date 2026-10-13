@@ -10,7 +10,7 @@ import { I18nService } from '../../core/i18n.service';
 import { SideThemeService } from '../../core/side-theme.service';
 import { TimeService } from '../../core/time.service';
 import { TournamentContextService } from '../../core/tournament-context.service';
-import { TournamentHubService } from '../../core/tournament-hub.service';
+import { TatamiQueueChangedEvent, TournamentHubService } from '../../core/tournament-hub.service';
 import { MatchComponent } from './match.component';
 
 const ENABLED_SCORE_BUTTON = '.btn--positive:not(:disabled)';
@@ -21,6 +21,7 @@ describe('MatchComponent', () => {
     tournamentId: string;
     categoryId: string;
   }>;
+  let tatamiQueueChanges: Subject<TatamiQueueChangedEvent>;
   let getTatamiQueueSpy: Mock;
   let getAthletesSpy: Mock;
   let startFightSpy: Mock;
@@ -135,6 +136,7 @@ describe('MatchComponent', () => {
       tournamentId: string;
       categoryId: string;
     }>();
+    tatamiQueueChanges = new Subject<TatamiQueueChangedEvent>();
 
     const tournament = createTournament();
     tournamentSignal = signal(tournament);
@@ -207,6 +209,7 @@ describe('MatchComponent', () => {
             connect: () => Promise.resolve(),
             fightUpdated$: fightUpdates.asObservable(),
             categoryFightsUpdated$: categoryFightsUpdates.asObservable(),
+            tatamiQueueChanged$: tatamiQueueChanges.asObservable(),
             serverTimeSync$: new Subject<string>().asObservable(),
             reconnected$: new Subject<void>().asObservable(),
           },
@@ -1005,8 +1008,8 @@ describe('MatchComponent', () => {
       click(fixture, element, '.confirm-row .btn--draw');
       click(fixture, element, '.modal-card .btn--primary');
 
-      expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'free-1', { winnerId: null, winnerSide: 'blue' }, expect.any(String));
-      expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'free-1', { winnerId: null }, expect.any(String));
+      expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'free-1', { winnerId: null, winnerSide: 'Blue' }, expect.any(String));
+      expect(apiMock.confirmResult).toHaveBeenCalledWith('tournament-1', 'free-1', { winnerId: null, winnerSide: null }, expect.any(String));
       fixture.destroy();
     });
 
@@ -1096,6 +1099,43 @@ describe('MatchComponent', () => {
         goldenScoreDurationSeconds: 180,
       });
       expect(apiMock.deleteFreeFight).toHaveBeenCalledWith('tournament-1', 'free-1');
+      fixture.destroy();
+    });
+
+    it('takes the fight time as m:ss and rejects an invalid time without saving', async () => {
+      apiMock.createFreeFight = vi.fn().mockReturnValue(of(freeFight()));
+      const { fixture, element } = setup(queueWith(pendingFight()));
+
+      click(fixture, element, '.upcoming-list__add');
+      // ngModel writes its initial value in a microtask.
+      await Promise.resolve();
+      const duration = element.querySelector('input[name="freeFightDuration"]') as HTMLInputElement;
+      expect(duration.value).toBe('4:00');
+
+      duration.value = '2:3';
+      duration.dispatchEvent(new Event('input'));
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+      expect(element.querySelector('.free-fight-dialog__error')?.textContent).toContain('freeFight.invalidTime');
+      expect(apiMock.createFreeFight).not.toHaveBeenCalled();
+
+      duration.value = '2:30';
+      duration.dispatchEvent(new Event('input'));
+      click(fixture, element, '.free-fight-dialog .btn--primary');
+      expect(apiMock.createFreeFight).toHaveBeenCalledWith('tournament-1', 'tatami-1', expect.objectContaining({
+        matchDurationSeconds: 150,
+      }));
+      fixture.destroy();
+    });
+
+    it('reloads the queue when a Freikampf of the selected tatami was deleted elsewhere', () => {
+      const { fixture } = setup(queueWith(pendingFight(), [freeFight()]));
+      getTatamiQueueSpy.mockClear();
+
+      tatamiQueueChanges.next({ tournamentId: 'tournament-1', tatamiId: 'other-tatami' });
+      expect(getTatamiQueueSpy).not.toHaveBeenCalled();
+
+      tatamiQueueChanges.next({ tournamentId: 'tournament-1', tatamiId: 'tatami-1' });
+      expect(getTatamiQueueSpy).toHaveBeenCalled();
       fixture.destroy();
     });
   });

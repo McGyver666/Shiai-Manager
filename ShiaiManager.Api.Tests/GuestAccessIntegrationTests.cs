@@ -77,6 +77,28 @@ public sealed class GuestAccessIntegrationTests : IClassFixture<GuestAccessInteg
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GuestToken_CannotOperateLiveFightsOrFreikaempfe()
+    {
+        using var client = _factory.CreateClient();
+        var adminToken = await BootstrapAndLoginAdminAsync(client);
+        var tournamentId = await CreateTournamentAsync(client, adminToken, "Gast ohne Live-Bedienung");
+        var guestToken = await EnableGuestShareAsync(client, adminToken, tournamentId);
+
+        using var guestClient = _factory.CreateClient();
+        guestClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", guestToken);
+
+        foreach (var request in ApiAuthorizationIntegrationTests.LiveFightOperationRequests(tournamentId, Guid.NewGuid()))
+        {
+            using var message = new HttpRequestMessage(request.Method, request.Uri) { Content = request.Content };
+            using var response = await guestClient.SendAsync(message);
+
+            Assert.True(
+                response.StatusCode is HttpStatusCode.Forbidden,
+                $"Guest request {request.Method} {request.Uri} returned {response.StatusCode}.");
+        }
+    }
+
     private static async Task<string> BootstrapAndLoginAdminAsync(HttpClient client)
     {
         var bootstrapResponse = await client.PostAsJsonAsync("/api/auth/bootstrap-admin", new BootstrapAdminRequest

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ShiaiManager.Api.Controllers;
 
 /// <summary>
-/// API endpoints for adding, editing and deleting Freikämpfe at the Mattentisch (ADR-0013).
+/// API endpoints for adding, reading, editing and deleting Freikämpfe at the Mattentisch (ADR-0013).
 /// Running a Freikampf uses the regular match endpoints.
 /// </summary>
 [ApiController]
@@ -22,6 +22,18 @@ public sealed class FreeFightsController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(freeFightService);
         _freeFightService = freeFightService;
+    }
+
+    /// <summary>
+    /// Returns a Freikampf of the tournament.
+    /// </summary>
+    [HttpGet("free-fights/{fightId:guid}")]
+    [ProducesResponseType(typeof(Fight), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Fight>> GetAsync(Guid tournamentId, Guid fightId, CancellationToken cancellationToken)
+    {
+        var fight = await _freeFightService.GetAsync(tournamentId, fightId, cancellationToken);
+        return fight is null ? NotFound() : Ok(fight);
     }
 
     /// <summary>

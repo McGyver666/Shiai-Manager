@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using ShiaiManager.Api.Models;
-using ShiaiManager.Api.Services;
 
 namespace ShiaiManager.Api.Data;
 
@@ -274,8 +273,8 @@ public sealed class AppDbContext : DbContext
         fight.Property(x => x.WhiteSourceOutcome).HasMaxLength(10);
         fight.Property(x => x.BlueSourceOutcome).HasMaxLength(10);
         fight.Property(x => x.Kind).IsRequired().HasMaxLength(10).HasDefaultValue(nameof(FightKind.Regular));
-        fight.Property(x => x.WhiteName).HasMaxLength(FreeFightRules.MaxNameLength);
-        fight.Property(x => x.BlueName).HasMaxLength(FreeFightRules.MaxNameLength);
+        fight.Property(x => x.WhiteName).HasMaxLength(FreeFightDetails.MaxNameLength);
+        fight.Property(x => x.BlueName).HasMaxLength(FreeFightDetails.MaxNameLength);
         fight.Property(x => x.WinnerSide).HasMaxLength(10);
         fight.HasOne(x => x.Tournament)
              .WithMany()

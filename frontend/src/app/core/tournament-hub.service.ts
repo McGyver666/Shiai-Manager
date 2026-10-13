@@ -9,6 +9,12 @@ export interface CategoryFightsUpdatedEvent {
   categoryId: string;
 }
 
+/** A tatami queue lost a fight that no FightUpdated message can describe (e.g. a deleted Freikampf). */
+export interface TatamiQueueChangedEvent {
+  tournamentId: string;
+  tatamiId: string | null;
+}
+
 /**
  * Wraps the SignalR connection to the TournamentHub.
  * Components subscribe to fightUpdated$ and categoryFightsUpdated$ for
@@ -29,6 +35,7 @@ export class TournamentHubService {
 
   private readonly _fightUpdated = new Subject<Fight>();
   private readonly _categoryFightsUpdated = new Subject<CategoryFightsUpdatedEvent>();
+  private readonly _tatamiQueueChanged = new Subject<TatamiQueueChangedEvent>();
   private readonly _serverTimeSync = new Subject<string>();
   private readonly _reconnected = new Subject<void>();
 
@@ -44,6 +51,9 @@ export class TournamentHubService {
    */
   readonly categoryFightsUpdated$: Observable<CategoryFightsUpdatedEvent> =
     this._categoryFightsUpdated.asObservable();
+
+  /** Emits when a tatami queue must be re-fetched because a fight was removed from it. */
+  readonly tatamiQueueChanged$: Observable<TatamiQueueChangedEvent> = this._tatamiQueueChanged.asObservable();
 
   /** Connects to the hub and joins the given tournament group. */
   async connect(tournamentId: string): Promise<void> {
@@ -77,6 +87,8 @@ export class TournamentHubService {
     });
     this.connection.on('CategoryFightsUpdated', (evt: CategoryFightsUpdatedEvent) =>
       this._categoryFightsUpdated.next(evt));
+    this.connection.on('TatamiQueueChanged', (evt: TatamiQueueChangedEvent) =>
+      this._tatamiQueueChanged.next(evt));
 
     this.connection.onreconnected(() => {
       this.connected.set(true);

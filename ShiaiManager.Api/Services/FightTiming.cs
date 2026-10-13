@@ -16,16 +16,17 @@ public readonly record struct FightTiming(int MatchDurationSeconds, bool GoldenS
     /// <summary>Default golden score duration of a new Freikampf.</summary>
     public const int DefaultGoldenScoreDurationSeconds = 180;
 
+    /// <summary>Clock settings stored on a Freikampf, falling back to the defaults for missing values.</summary>
+    public static FightTiming ForFreeFight(FightRecord fight) =>
+        new(
+            fight.MatchDurationSeconds ?? DefaultFreeFightMatchDurationSeconds,
+            fight.GoldenScoreEnabled ?? false,
+            fight.GoldenScoreDurationSeconds ?? DefaultGoldenScoreDurationSeconds);
+
     /// <summary>Clock settings of the fight; null for a regular fight whose category is unknown.</summary>
     public static FightTiming? Resolve(FightRecord fight, CategoryRecord? category)
     {
-        if (FreeFightRules.IsFree(fight))
-        {
-            return new FightTiming(
-                fight.MatchDurationSeconds ?? DefaultFreeFightMatchDurationSeconds,
-                fight.GoldenScoreEnabled ?? false,
-                fight.GoldenScoreDurationSeconds ?? DefaultGoldenScoreDurationSeconds);
-        }
+        if (fight.IsFree) return ForFreeFight(fight);
 
         return category is null
             ? null

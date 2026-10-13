@@ -11,7 +11,6 @@ public sealed class TournamentOverviewStatsService : IOverviewStatsService
 {
     private readonly AppDbContext _dbContext;
     private static readonly string CompletedStatus = FightStatus.Completed.ToString();
-    private static readonly string RegularKind = FreeFightRules.RegularKind;
 
     /// <summary>Initializes a new service instance.</summary>
     public TournamentOverviewStatsService(AppDbContext dbContext)
@@ -36,7 +35,8 @@ public sealed class TournamentOverviewStatsService : IOverviewStatsService
             .CountAsync(c => c.TournamentId == tournamentId, cancellationToken);
         var fights = await _dbContext.Fights
             .AsNoTracking()
-            .Where(f => f.TournamentId == tournamentId && f.Kind == RegularKind && !f.IsBye)
+            .OfficialOnly()
+            .Where(f => f.TournamentId == tournamentId && !f.IsBye)
             .Select(f => new
             {
                 f.Status,

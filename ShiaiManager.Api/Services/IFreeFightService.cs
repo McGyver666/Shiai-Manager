@@ -10,15 +10,8 @@ public sealed record FreeFightSideInput(Guid? AthleteId, string? Name);
 /// <summary>Editable settings of a Freikampf.</summary>
 /// <param name="White">White side.</param>
 /// <param name="Blue">Accent (blue) side.</param>
-/// <param name="MatchDurationSeconds">Regular fight time in seconds.</param>
-/// <param name="GoldenScoreEnabled">Whether a golden score follows a tie.</param>
-/// <param name="GoldenScoreDurationSeconds">Golden score duration in seconds.</param>
-public sealed record FreeFightInput(
-    FreeFightSideInput White,
-    FreeFightSideInput Blue,
-    int MatchDurationSeconds,
-    bool GoldenScoreEnabled,
-    int GoldenScoreDurationSeconds);
+/// <param name="Timing">Fight time and golden score settings.</param>
+public sealed record FreeFightInput(FreeFightSideInput White, FreeFightSideInput Blue, FightTiming Timing);
 
 /// <summary>Outcome status of a Freikampf operation.</summary>
 public enum FreeFightResultStatus
@@ -56,6 +49,9 @@ public sealed record FreeFightResult(FreeFightResultStatus Status, Fight? Fight 
 /// </summary>
 public interface IFreeFightService
 {
+    /// <summary>Returns the Freikampf of the tournament; null when no Freikampf with this id exists.</summary>
+    Task<Fight?> GetAsync(Guid tournamentId, Guid fightId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Adds a pending Freikampf to the tatami queue, at its end or, with <paramref name="placeNext"/>,
     /// directly behind the running or current fight.

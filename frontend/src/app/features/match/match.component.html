@@ -73,68 +73,16 @@
     </section>
   }
 
-  @if (freeFightForm(); as form) {
-    <div class="modal-backdrop" (click)="cancelFreeFight()"></div>
-    <section class="modal-card free-fight-dialog" role="dialog" aria-modal="true" aria-labelledby="free-fight-title" (click)="$event.stopPropagation()">
-      <h2 id="free-fight-title">{{ (form.fightId ? 'freeFight.editTitle' : 'freeFight.createTitle') | t }}</h2>
-
-      @for (side of ['white', 'blue']; track side) {
-        @let sideForm = side === 'white' ? form.white : form.blue;
-        <fieldset class="free-fight-dialog__side" [class.free-fight-dialog__side--white]="side === 'white'" [class.free-fight-dialog__side--blue]="side === 'blue'">
-          <legend>{{ (side === 'white' ? 'match.whiteSide' : sideTheme.accentSideLabelKey(context.tournament())) | t }}</legend>
-          <label>
-            <span>{{ 'freeFight.participant' | t }}</span>
-            <select [(ngModel)]="sideForm.athleteId" [name]="side + 'Athlete'" [attr.data-side]="side">
-              <option value="">{{ 'freeFight.freeText' | t }}</option>
-              @for (athlete of athleteOptions(); track athlete.id) {
-                <option [value]="athlete.id">{{ athlete.lastName }}, {{ athlete.firstName }}</option>
-              }
-            </select>
-          </label>
-          @if (!sideForm.athleteId) {
-            <label>
-              <span>{{ 'freeFight.name' | t }}</span>
-              <input type="text" maxlength="60" [(ngModel)]="sideForm.name" [name]="side + 'Name'" [attr.data-side]="side" />
-            </label>
-          }
-        </fieldset>
-      }
-
-      <div class="free-fight-dialog__times">
-        <label>
-          <span>{{ 'freeFight.matchDurationSeconds' | t }}</span>
-          <input type="number" min="30" max="3600" step="30" [(ngModel)]="form.matchDurationSeconds" name="freeFightDuration" />
-        </label>
-        <label class="free-fight-dialog__check">
-          <input type="checkbox" [(ngModel)]="form.goldenScoreEnabled" name="freeFightGoldenScore" />
-          <span>{{ 'freeFight.goldenScoreEnabled' | t }}</span>
-        </label>
-        @if (form.goldenScoreEnabled) {
-          <label>
-            <span>{{ 'freeFight.goldenScoreDurationSeconds' | t }}</span>
-            <input type="number" min="30" max="3600" step="30" [(ngModel)]="form.goldenScoreDurationSeconds" name="freeFightGoldenScoreDuration" />
-          </label>
-        }
-        @if (!form.fightId) {
-          <label class="free-fight-dialog__check">
-            <input type="checkbox" [(ngModel)]="form.placeNext" name="freeFightPlaceNext" />
-            <span>{{ 'freeFight.placeNext' | t }}</span>
-          </label>
-        }
-      </div>
-
-      @for (name of freeFightRestWarnings(form); track name) {
-        <p class="free-fight-dialog__warning" role="status">{{ 'freeFight.restWarning' | t: { name: name } }}</p>
-      }
-      @if (freeFightError(); as error) {
-        <p class="free-fight-dialog__error" role="alert">{{ error }}</p>
-      }
-
-      <div class="modal-actions">
-        <button class="btn btn--secondary" type="button" [disabled]="freeFightSaving()" (click)="cancelFreeFight()">{{ 'common.cancel' | t }}</button>
-        <button class="btn btn--primary" type="button" [disabled]="freeFightSaving()" (click)="saveFreeFight()">{{ 'common.save' | t }}</button>
-      </div>
-    </section>
+  @if (freeFightDialog(); as dialog) {
+    <app-free-fight-dialog
+      [tournamentId]="context.tournamentId() ?? ''"
+      [tatamiId]="selectedTatamiId() ?? ''"
+      [fight]="dialog.fight"
+      [athletes]="athleteList()"
+      [insufficientRestAthleteIds]="insufficientRestAthleteIds()"
+      [accentSideLabelKey]="sideTheme.accentSideLabelKey(context.tournament())"
+      (saved)="onFreeFightSaved()"
+      (cancelled)="closeFreeFightDialog()" />
   }
 
   @if (selectedTatamiId()) {

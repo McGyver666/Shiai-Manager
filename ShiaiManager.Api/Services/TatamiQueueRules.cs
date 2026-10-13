@@ -4,30 +4,32 @@ using ShiaiManager.Api.Models;
 namespace ShiaiManager.Api.Services;
 
 /// <summary>
-/// Shared ordering of the manual tatami queue, used by queue reordering and Freikampf placement.
+/// Shared ordering of the manual tatami queue, used by the queue view, queue reordering and Freikampf placement.
+/// Start-ready fights come first; pending fights whose sides are still open (n.n.) follow.
 /// </summary>
 internal static class TatamiQueueRules
 {
     private static readonly string Pending = FightStatus.Pending.ToString();
 
-    /// <summary>Pending, non-bye fights on the tatami whose both sides are known (athlete or Freikampf name).</summary>
-    public static IQueryable<FightRecord> ReadyPending(IQueryable<FightRecord> fights, Guid tournamentId, Guid tatamiId) =>
+    /// <summary>Pending, non-bye fights on the tatami, including fights whose sides are still open.</summary>
+    public static IQueryable<FightRecord> PendingOnTatami(IQueryable<FightRecord> fights, Guid tournamentId, Guid tatamiId) =>
         fights.Where(f => f.TournamentId == tournamentId
             && f.TatamiId == tatamiId
             && f.Status == Pending
-            && !f.IsBye
-            && (f.WhiteAthleteId != null || f.WhiteName != null)
-            && (f.BlueAthleteId != null || f.BlueName != null));
+            && !f.IsBye);
 
     /// <summary>True when both sides of the fight are known (athlete or Freikampf name).</summary>
     public static bool HasBothSides(FightRecord fight) =>
         (fight.WhiteAthleteId is not null || fight.WhiteName is not null)
         && (fight.BlueAthleteId is not null || fight.BlueName is not null);
 
-    /// <summary>Orders pending fights by manual queue order, falling back to bracket order.</summary>
+    /// <summary>
+    /// Orders pending fights: start-ready before open ones, then by manual queue order, falling back to bracket order.
+    /// </summary>
     public static List<FightRecord> InQueueOrder(IEnumerable<FightRecord> pending) =>
         pending
-            .OrderBy(f => f.QueueOrder ?? int.MaxValue)
+            .OrderBy(f => HasBothSides(f) ? 0 : 1)
+            .ThenBy(f => f.QueueOrder ?? int.MaxValue)
             .ThenBy(f => f.Round)
             .ThenBy(f => f.FightNumber)
             .ToList();

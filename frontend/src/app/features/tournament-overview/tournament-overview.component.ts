@@ -11,7 +11,7 @@ import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 import { seriesPositionLabel, seriesScoreSides } from '../../shared/fight-series';
-import { fightClockSettings, fightSideName } from '../../shared/free-fight';
+import { fightCategoryName, fightClockSettings, fightSideName } from '../../shared/free-fight';
 import { canAutoRotateHero, nextHeroIndex } from './overview-hero-state';
 
 interface TatamiView {
@@ -105,6 +105,7 @@ export class TournamentOverviewComponent implements OnDestroy {
   private dataSubscriptions = new Subscription();
   private fightSubscription?: Subscription;
   private categoryFightsSubscription?: Subscription;
+  private tatamiQueueSubscription?: Subscription;
   private serverTimeSubscription?: Subscription;
   private reconnectSubscription?: Subscription;
   private clockHandle: ReturnType<typeof setInterval> | null = null;
@@ -146,6 +147,12 @@ export class TournamentOverviewComponent implements OnDestroy {
         this.scheduleRefresh(tournamentId);
       }
     });
+    this.tatamiQueueSubscription = this.hub.tatamiQueueChanged$.subscribe((event) => {
+      const tournamentId = this.tournamentId();
+      if (tournamentId && event.tournamentId === tournamentId) {
+        this.scheduleRefresh(tournamentId);
+      }
+    });
     this.serverTimeSubscription = this.hub.serverTimeSync$.subscribe((serverNowUtc) => {
       this.time.ingestServerNowUtc(serverNowUtc);
     });
@@ -162,6 +169,7 @@ export class TournamentOverviewComponent implements OnDestroy {
     this.dataSubscriptions.unsubscribe();
     this.fightSubscription?.unsubscribe();
     this.categoryFightsSubscription?.unsubscribe();
+    this.tatamiQueueSubscription?.unsubscribe();
     this.serverTimeSubscription?.unsubscribe();
     this.reconnectSubscription?.unsubscribe();
     this.clearRefreshHandle();
@@ -294,8 +302,10 @@ export class TournamentOverviewComponent implements OnDestroy {
   }
 
   protected categoryName(id: string | null): string {
-    if (id === null) return this.i18n.translate('freeFight.label');
-    return this.categories().get(id)?.name ?? this.i18n.translate('draw.tbd');
+    return fightCategoryName(
+      id,
+      (categoryId) => this.categories().get(categoryId)?.name ?? this.i18n.translate('draw.tbd'),
+      (key) => this.i18n.translate(key));
   }
 
   private clockSettings(fight: Fight) {

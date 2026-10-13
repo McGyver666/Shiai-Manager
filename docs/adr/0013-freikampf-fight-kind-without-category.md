@@ -16,9 +16,14 @@ durations, and participants and winner were athlete references only.
   category reference becomes optional for Freikämpfe only.
 - A Freikampf carries its own match duration and Golden Score setting (enabled + duration).
 - Each side is either a free-text name or an athlete of the Turnier; the winner of a Freikampf is
-  recorded per side (White/Blue), not as an athlete reference only. Hikiwake is allowed.
+  recorded per side (White/Blue), not as an athlete reference. Hikiwake is allowed and is the
+  operator's decision: since a Freikampf never counts, the server does not check clock or score
+  before accepting it.
+- A Freikampf belongs to the tatami it was created on: it cannot be moved to another tatami, and
+  deleting the tatami deletes its waiting Freikämpfe.
 - Every consumer that evaluates fights (rankings, Vereinswertung, medals, Kampfübersicht, match
-  lists, guest share, overview statistics, bracket progression, category lock) excludes Freikämpfe.
+  lists, guest share, overview statistics, bracket progression, category lock) excludes Freikämpfe;
+  queries over official results use one shared filter for this.
 
 ## Considered Options
 

@@ -193,11 +193,11 @@ public sealed class SqliteCategoriesStore : ICategoriesStore
         var ids = await _dbContext.Fights
             .AsNoTracking()
             .Where(x => x.TournamentId == tournamentId && x.CategoryId != null)
-            .Select(x => x.CategoryId!.Value)
+            .Select(x => x.CategoryId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        return ids.ToHashSet();
+        return ids.OfType<Guid>().ToHashSet();
     }
 
     /// <inheritdoc />

@@ -169,6 +169,7 @@ describe('TournamentOverviewComponent', () => {
             connect: () => Promise.resolve(),
             fightUpdated$: fightUpdates.asObservable(),
             categoryFightsUpdated$: new Subject().asObservable(),
+            tatamiQueueChanged$: new Subject().asObservable(),
             serverTimeSync$: new Subject().asObservable(),
             reconnected$: new Subject().asObservable(),
           },

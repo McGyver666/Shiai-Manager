@@ -86,7 +86,9 @@ internal static class BestOfThreeSeries
             .AsNoTracking()
             .Where(f => f.CategoryId != null && seriesCategoryIds.Contains(f.CategoryId.Value))
             .ToListAsync(cancellationToken);
-        return bouts.GroupBy(f => f.CategoryId!.Value).ToDictionary(g => g.Key, g => g.ToList());
+        return bouts.WithCategory()
+            .GroupBy(x => x.CategoryId, x => x.Fight)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     /// <summary>Creates a pending bout of a Kampfserie between the series' White and Blue athlete.</summary>

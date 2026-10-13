@@ -214,7 +214,7 @@ public sealed class BracketService : IBracketService
             "Bracket generated for category {CategoryId}: {Count} fights ({Format}).",
             categoryId, fights.Count, format);
 
-        return fights.Select(MapToModel).ToList();
+        return fights.Select(f => FightMapper.ToModel(f)).ToList();
     }
 
     /// <inheritdoc />
@@ -939,44 +939,4 @@ public sealed class BracketService : IBracketService
         while (p < n) p <<= 1;
         return p;
     }
-
-    private static Fight MapToModel(FightRecord r) =>
-        new(r.Id,
-            r.TournamentId,
-            r.CategoryId,
-            Enum.Parse<FightBracketType>(r.BracketType),
-            r.Round,
-            r.FightNumber,
-            r.PoolNumber,
-            r.WhiteSourceFightId,
-            r.WhiteSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.WhiteSourceOutcome),
-            r.BlueSourceFightId,
-            r.BlueSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.BlueSourceOutcome),
-            r.WhiteAthleteId,
-            r.BlueAthleteId,
-            r.WinnerId,
-            r.IsBye,
-            Enum.Parse<FightStatus>(r.Status),
-            r.TatamiId,
-            r.QueueOrder,
-            r.WhiteScore,
-            r.BlueScore,
-            r.WhitePenalties,
-            r.BluePenalties,
-            r.WhiteIpponCount,
-            r.WhiteWazaAriCount,
-            r.WhiteYukoCount,
-            r.BlueIpponCount,
-            r.BlueWazaAriCount,
-            r.BlueYukoCount,
-            r.PausedAtUtc,
-            r.OsaeKomiSide,
-            r.OsaeKomiStartedAtUtc,
-            r.OsaeKomiPausedAtUtc,
-            r.OsaeKomiElapsedMilliseconds,
-            r.StartedAtUtc,
-            r.CompletedAtUtc,
-            r.CreatedAtUtc,
-            r.UpdatedAtUtc,
-            IsGoldenScore: false);
 }

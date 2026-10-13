@@ -277,6 +277,11 @@
   color: var(--state-info);
 }
 
+.badge-bracket--free {
+  background: var(--state-warning-bg);
+  color: var(--state-warning);
+}
+
 .badge-status {
   background: var(--surface-muted);
   color: var(--text-strong);
@@ -605,6 +610,17 @@
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.25rem;
+}
+
+.upcoming-list__add {
+  margin-left: auto;
+}
+
+.free-fight-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
 }
 
 .upcoming-list__title {

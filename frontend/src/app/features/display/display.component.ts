@@ -20,7 +20,7 @@ import { Athlete, Category, Club, Fight, FightSide, Tatami, TatamiQueue, Tournam
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 import { seriesScoreSides } from '../../shared/fight-series';
-import { fightClockSettings, fightSideName } from '../../shared/free-fight';
+import { fightCategoryName, fightClockSettings, fightSideName } from '../../shared/free-fight';
 import { I18nService } from '../../core/i18n.service';
 
 interface TatamiDisplay {
@@ -80,6 +80,7 @@ export class DisplayComponent implements OnInit, OnDestroy {
   private serverTimeSub?: Subscription;
   private reconnectSub?: Subscription;
   private categoryFightsSub?: Subscription;
+  private tatamiQueueSub?: Subscription;
   private querySub?: Subscription;
   private timerHandle: ReturnType<typeof setInterval> | null = null;
   private lastTatamiQueueRefreshAt = 0;
@@ -115,6 +116,13 @@ export class DisplayComponent implements OnInit, OnDestroy {
 
     this.categoryFightsSub = this.hub.categoryFightsUpdated$.subscribe((evt) => {
       this.handleCategoryFightsUpdated(evt);
+    });
+
+    this.tatamiQueueSub = this.hub.tatamiQueueChanged$.subscribe((evt) => {
+      const tid = this.tournamentId();
+      if (tid && evt.tournamentId === tid) {
+        this.refreshQueues(tid);
+      }
     });
 
     this.serverTimeSub = this.hub.serverTimeSync$.subscribe((serverNowUtc) => {
@@ -154,6 +162,7 @@ export class DisplayComponent implements OnInit, OnDestroy {
     this.serverTimeSub?.unsubscribe();
     this.reconnectSub?.unsubscribe();
     this.categoryFightsSub?.unsubscribe();
+    this.tatamiQueueSub?.unsubscribe();
     if (this.timerHandle !== null) {
       clearInterval(this.timerHandle);
       this.timerHandle = null;
@@ -518,8 +527,10 @@ export class DisplayComponent implements OnInit, OnDestroy {
   }
 
   protected categoryName(id: string | null): string {
-    if (id === null) return this.i18n.translate('freeFight.label');
-    return this.categories().get(id)?.name ?? id.substring(0, 8);
+    return fightCategoryName(
+      id,
+      (categoryId) => this.categories().get(categoryId)?.name ?? categoryId.substring(0, 8),
+      (key) => this.i18n.translate(key));
   }
 
   protected scoreCount(fight: Fight, side: FightSide, scoreType: 'ippon' | 'wazaAri' | 'yuko' | 'shido'): number {

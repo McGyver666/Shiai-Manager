@@ -1,5 +1,13 @@
 import { Category, Fight } from '../core/models';
-import { fightClockSettings, fightSideName, hasBothSides, isWinningSide } from './free-fight';
+import {
+  fightCategoryName,
+  fightClockSettings,
+  fightSideName,
+  formatClockInput,
+  hasBothSides,
+  isWinningSide,
+  parseClockInput,
+} from './free-fight';
 
 describe('free-fight', () => {
   const athleteName = (id: string | null) => (id ? `Athlet ${id}` : '?');
@@ -46,5 +54,22 @@ describe('free-fight', () => {
 
     expect(isWinningSide({ ...regular, winnerId: 'a2' }, 'blue')).toBe(true);
     expect(isWinningSide({ ...regular, winnerId: null, whiteAthleteId: null }, 'white')).toBe(false);
+  });
+
+  it('labels a fight without category as Freikampf', () => {
+    const translate = (key: string) => `t:${key}`;
+    expect(fightCategoryName(null, (id) => `Kategorie ${id}`, translate)).toBe('t:freeFight.label');
+    expect(fightCategoryName('c1', (id) => `Kategorie ${id}`, translate)).toBe('Kategorie c1');
+  });
+
+  it('formats and parses fight times as m:ss', () => {
+    expect(formatClockInput(240)).toBe('4:00');
+    expect(formatClockInput(95)).toBe('1:35');
+    expect(parseClockInput('4:00')).toBe(240);
+    expect(parseClockInput(' 12:05 ')).toBe(725);
+    expect(parseClockInput('3')).toBe(180);
+    expect(parseClockInput('2:3')).toBeNull();
+    expect(parseClockInput('1:60')).toBeNull();
+    expect(parseClockInput('abc')).toBeNull();
   });
 });

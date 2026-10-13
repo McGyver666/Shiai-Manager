@@ -28,8 +28,6 @@ public sealed class MatchService : IMatchService
     private static readonly string Paused = FightStatus.Paused.ToString();
     private static readonly string Completed = FightStatus.Completed.ToString();
     private const int HansokuMakeShidoCount = 3;
-    private const string WhiteSide = "White";
-    private const string BlueSide = "Blue";
 
     /// <summary>Initializes a new service instance.</summary>
     public MatchService(
@@ -164,16 +162,17 @@ public sealed class MatchService : IMatchService
 
         // Load the pending fights on this tatami in their current display order.
         var pending = await TatamiQueueRules
-            .ReadyPending(_dbContext.Fights, fight.TournamentId, fight.TatamiId.Value)
+            .PendingOnTatami(_dbContext.Fights, fight.TournamentId, fight.TatamiId.Value)
             .ToListAsync(cancellationToken);
 
         var ordered = TatamiQueueRules.InQueueOrder(pending);
 
+        // Only start-ready fights can be reordered; they precede the open ones, so a swap never crosses that boundary.
         var index = ordered.FindIndex(f => f.Id == fight.Id);
-        if (index < 0) return MatchActionResult.InvalidState;
+        if (index < 0 || !TatamiQueueRules.HasBothSides(fight)) return MatchActionResult.InvalidState;
 
         var targetIndex = direction == QueueMoveDirection.Up ? index - 1 : index + 1;
-        if (targetIndex < 0 || targetIndex >= ordered.Count)
+        if (targetIndex < 0 || targetIndex >= ordered.Count || !TatamiQueueRules.HasBothSides(ordered[targetIndex]))
         {
             // Already at the boundary: nothing to do.
             return MatchActionResult.Success;
@@ -460,6 +459,7 @@ public sealed class MatchService : IMatchService
     public async Task<MatchActionResult> ConfirmResultAsync(
         Guid fightId,
         Guid? winnerId,
+        FightSide? winnerSide,
         string user,
         CancellationToken cancellationToken)
     {
@@ -468,16 +468,15 @@ public sealed class MatchService : IMatchService
 
         if (fight.Status != InProgress && fight.Status != Paused) return MatchActionResult.InvalidState;
 
-        if (FreeFightRules.IsFree(fight))
+        // A Freikampf is decided per side, a regular fight per athlete; the other kind of winner is not accepted.
+        if (fight.IsFree)
         {
-            var side = winnerId is null ? null
-                : winnerId == fight.WhiteAthleteId ? WhiteSide
-                : winnerId == fight.BlueAthleteId ? BlueSide
-                : null;
-            if (winnerId is not null && side is null) return MatchActionResult.WinnerNotParticipant;
-            return await CompleteFreeFightAsync(fight, side, user, cancellationToken);
+            return winnerId is null
+                ? await CompleteFreeFightAsync(fight, winnerSide, user, cancellationToken)
+                : MatchActionResult.WinnerNotParticipant;
         }
 
+        if (winnerSide is not null) return MatchActionResult.WinnerNotParticipant;
         if (fight.CategoryId is not { } categoryId) return MatchActionResult.InvalidState;
 
         if (winnerId is null)
@@ -518,51 +517,30 @@ public sealed class MatchService : IMatchService
         return MatchActionResult.Success;
     }
 
-    /// <inheritdoc />
-    public async Task<MatchActionResult> ConfirmResultBySideAsync(
-        Guid fightId,
-        string? winnerSide,
-        string user,
-        CancellationToken cancellationToken)
-    {
-        var fight = await _dbContext.Fights.FirstOrDefaultAsync(f => f.Id == fightId, cancellationToken);
-        if (fight is null) return MatchActionResult.FightNotFound;
-        if (!FreeFightRules.IsFree(fight)) return MatchActionResult.InvalidState;
-        if (fight.Status != InProgress && fight.Status != Paused) return MatchActionResult.InvalidState;
-
-        string? side = null;
-        if (winnerSide is not null)
-        {
-            if (!TryGetSide(winnerSide, out var whiteWins)) return MatchActionResult.WinnerNotParticipant;
-            side = whiteWins ? WhiteSide : BlueSide;
-        }
-
-        return await CompleteFreeFightAsync(fight, side, user, cancellationToken);
-    }
-
     /// <summary>
-    /// Completes a Freikampf with a winning side (null = Hikiwake). It touches no category, bracket or
-    /// ranking; only the athletes' last-fight metadata is updated (ADR-0013).
+    /// Completes a Freikampf with a winning side (null = Hikiwake, at the operator's discretion). It touches no
+    /// category, bracket or ranking; only the athletes' last-fight metadata is updated (ADR-0013).
     /// </summary>
     private async Task<MatchActionResult> CompleteFreeFightAsync(
         FightRecord fight,
-        string? winnerSide,
+        FightSide? winnerSide,
         string user,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        fight.WinnerSide = winnerSide;
+        fight.WinnerSide = winnerSide?.ToString();
         MarkCompleted(fight, now);
 
         await UpdateAthletesLastFightMetadataAsync(fight, now, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var outcome = fight.WinnerSide ?? "Hikiwake";
         await _auditLog.LogAsync(
             fight.TournamentId, user, "ResultConfirmed", "Fight", fight.Id,
-            $"WinnerSide={winnerSide ?? "Hikiwake"}; Score={fight.WhiteScore}:{fight.BlueScore}", cancellationToken);
+            $"WinnerSide={outcome}; Score={fight.WhiteScore}:{fight.BlueScore}", cancellationToken);
         await BroadcastFightsUpdatedAsync([fight], cancellationToken);
 
-        _logger.LogInformation("Freikampf {FightId} confirmed, winning side {WinnerSide}.", fight.Id, winnerSide ?? "Hikiwake");
+        _logger.LogInformation("Freikampf {FightId} confirmed, winning side {WinnerSide}.", fight.Id, outcome);
         return MatchActionResult.Success;
     }
 
@@ -903,7 +881,7 @@ public sealed class MatchService : IMatchService
 
         if (BestOfThreeSeries.IsSeries(drawFormat))
         {
-            return SyncDecidingFight(fights);
+            return SyncDecidingFight(categoryId, fights);
         }
 
         if (drawFormat == BracketFormat.DoubleElimination.ToString())
@@ -951,7 +929,7 @@ public sealed class MatchService : IMatchService
     /// Creates the Entscheidungskampf at Serienstand 1:1 (same athletes, same tatami as bout 2) and removes it
     /// when a correction made it obsolete. Returns the removed fight, if any.
     /// </summary>
-    private FightRecord? SyncDecidingFight(List<FightRecord> bouts)
+    private FightRecord? SyncDecidingFight(Guid categoryId, List<FightRecord> bouts)
     {
         var decider = bouts.FirstOrDefault(f => f.Round == BestOfThreeSeries.DecidingRound);
         var needed = BestOfThreeSeries.NeedsDecidingFight(bouts);
@@ -961,7 +939,7 @@ public sealed class MatchService : IMatchService
             var second = bouts.Single(f => f.Round == 2);
             _dbContext.Fights.Add(BestOfThreeSeries.CreateBout(
                 second.TournamentId,
-                second.CategoryId!.Value,
+                categoryId,
                 BestOfThreeSeries.DecidingRound,
                 second.WhiteAthleteId,
                 second.BlueAthleteId,
@@ -1101,8 +1079,11 @@ public sealed class MatchService : IMatchService
     private static Guid? WinnerOf(FightRecord? source) =>
         source is { Status: var s, WinnerId: { } w } && s == Completed ? w : null;
 
-    /// <summary>A started fight stays on its tatami; only not-yet-started fights may be moved.</summary>
-    private static bool CanChangeTatami(FightRecord fight) => fight.Status == Pending;
+    /// <summary>
+    /// A started fight stays on its tatami; only not-yet-started fights may be moved. A Freikampf belongs to the
+    /// tatami it was created on (ADR-0013) and is never moved.
+    /// </summary>
+    private static bool CanChangeTatami(FightRecord fight) => fight.Status == Pending && !fight.IsFree;
 
     /// <summary>Returns the loser of a completed source fight, or null when not yet decided.</summary>
     private static Guid? LoserOf(FightRecord? source)
@@ -1132,10 +1113,9 @@ public sealed class MatchService : IMatchService
             await _hub.Clients.Group(fight.TournamentId.ToString()).SendAsync(
                 "FightUpdated",
                 new FightUpdatedMessage(
-                    MapToFight(fight) with
+                    FightMapper.ToModel(fight, isGoldenScore) with
                     {
                         Series = BestOfThreeSeries.DescribeOrNull(fight, seriesBouts),
-                        IsGoldenScore = isGoldenScore,
                     },
                     now),
                 CancellationToken.None);
@@ -1184,29 +1164,6 @@ public sealed class MatchService : IMatchService
         await BroadcastFightsUpdatedAsync([fight], cancellationToken);
         return MatchActionResult.Success;
     }
-
-    private static Fight MapToFight(FightRecord r) => new(
-        r.Id, r.TournamentId, r.CategoryId,
-        Enum.Parse<FightBracketType>(r.BracketType),
-        r.Round, r.FightNumber, r.PoolNumber,
-        r.WhiteSourceFightId,
-        r.WhiteSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.WhiteSourceOutcome),
-        r.BlueSourceFightId,
-        r.BlueSourceOutcome is null ? null : Enum.Parse<FightSlotSourceOutcome>(r.BlueSourceOutcome),
-        r.WhiteAthleteId, r.BlueAthleteId, r.WinnerId,
-        r.IsBye,
-        Enum.Parse<FightStatus>(r.Status),
-        r.TatamiId,
-        r.QueueOrder,
-        r.WhiteScore, r.BlueScore, r.WhitePenalties, r.BluePenalties,
-        r.WhiteIpponCount, r.WhiteWazaAriCount, r.WhiteYukoCount,
-        r.BlueIpponCount, r.BlueWazaAriCount, r.BlueYukoCount,
-        r.PausedAtUtc, r.OsaeKomiSide, r.OsaeKomiStartedAtUtc, r.OsaeKomiPausedAtUtc,
-        r.OsaeKomiElapsedMilliseconds,
-        r.StartedAtUtc, r.CompletedAtUtc,
-        r.CreatedAtUtc, r.UpdatedAtUtc,
-        IsGoldenScore: false,
-        FreeFight: FreeFightRules.DescribeOrNull(r));
 
     private static bool TryGetSide(string side, out bool whiteSide)
     {

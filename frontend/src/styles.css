@@ -1131,20 +1131,3 @@ app-display .active-categories-empty {color:var(--c-muted);font-style:italic;bac
   background: var(--surface-muted);
   color: var(--txt);
 }
-
-/* Freikampf (match component; kept global because the component CSS budget is exhausted) */
-app-match .upcoming-list__add {margin-left:auto}
-app-match .badge-bracket--free {background:var(--state-warning-bg);color:var(--state-warning)}
-app-match .free-fight-actions {display:flex;gap:.4rem;justify-content:center;margin-top:.4rem}
-app-match .free-fight-dialog {width:min(36rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);overflow-y:auto}
-app-match .free-fight-dialog__side {border:1px solid var(--c-border);border-radius:var(--radius);padding:.6rem .8rem;display:grid;gap:.5rem;margin:0}
-app-match .free-fight-dialog__side--white {border-left:4px solid var(--c-border)}
-app-match .free-fight-dialog__side--blue {border-left:4px solid var(--state-info)}
-app-match .free-fight-dialog__side legend {font-weight:700;padding:0 .3rem}
-app-match .free-fight-dialog label {margin:0}
-app-match .free-fight-dialog label > span {display:block;margin-bottom:.25rem}
-app-match .free-fight-dialog__times {display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.6rem;align-items:end}
-app-match .free-fight-dialog__check {display:flex;align-items:center;gap:.4rem}
-app-match .free-fight-dialog__check > span {margin:0}
-app-match .free-fight-dialog__warning {background:var(--state-warning-bg);color:var(--state-warning);border-radius:var(--radius);padding:.4rem .6rem}
-app-match .free-fight-dialog__error {color:var(--state-danger)}

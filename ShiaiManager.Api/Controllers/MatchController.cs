@@ -253,9 +253,8 @@ public sealed class MatchController : ControllerBase
     {
         if (!await FightBelongsToTournamentAsync(tournamentId, fightId, cancellationToken)) return NotFound();
 
-        var result = request.WinnerSide is not null
-            ? await _matchService.ConfirmResultBySideAsync(fightId, request.WinnerSide, CurrentUser(), cancellationToken)
-            : await _matchService.ConfirmResultAsync(fightId, request.WinnerId, CurrentUser(), cancellationToken);
+        var result = await _matchService.ConfirmResultAsync(
+            fightId, request.WinnerId, request.WinnerSide, CurrentUser(), cancellationToken);
         return MapResult(result);
     }
 

@@ -11,7 +11,7 @@ The API is served by the ASP.NET Core application under `/api`.
 - `PUT /api/tournaments/{tournamentId}`
 - `DELETE /api/tournaments/{tournamentId}`
 
-- `GET/POST/PUT/DELETE /api/tournaments/{tournamentId}/tatamis`
+- `GET/POST/PUT/DELETE /api/tournaments/{tournamentId}/tatamis` (deleting a tatami also deletes its waiting Freikämpfe)
 - `GET/POST/PUT/DELETE /api/tournaments/{tournamentId}/categories`
 - `POST /api/tournaments/{tournamentId}/categories/generate/preview`
 - `POST /api/tournaments/{tournamentId}/categories/generate/apply`
@@ -95,7 +95,7 @@ it never appears in category fights, rankings, club scoring, completed fights or
 - `POST /api/tournaments/{tournamentId}/category-presets/reset-defaults`
 
 - `GET /api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue`
-- `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami` (a started fight (`InProgress`, `Paused`, `Completed`) stays on its tatami; moving or unassigning it returns `409`)
+- `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami` (a started fight (`InProgress`, `Paused`, `Completed`) stays on its tatami; moving or unassigning it returns `409`; a Freikampf always stays on the tatami it was created on)
 - `POST /api/tournaments/{tournamentId}/fights/assign-tatami-bulk` (assign many fights to tatamis atomically; if any started fight would change its tatami, nothing is changed and `409` is returned)
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/queue-move`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/start`
@@ -106,10 +106,11 @@ it never appears in category fights, rankings, club scoring, completed fights or
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/stop`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/pause`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/resume`
-- `POST /api/tournaments/{tournamentId}/fights/{fightId}/result` (body `{ winnerId }`; for a Freikampf alternatively `{ winnerSide: "white" | "blue" }`; without a winner a Hiki-wake is recorded for team-matchday fights and Freikämpfe)
-- `POST /api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fights` (live operation roles; adds a Freikampf: `white`/`blue` each `{ athleteId }` or `{ name }` (max. 60 chars), `matchDurationSeconds` (30-3600, default 240), `goldenScoreEnabled`, `goldenScoreDurationSeconds` (30-3600, default 180), `placeNext`; returns `201` with the fight, `400` for a side without name or the same athlete twice, `404` for an unknown tatami or athlete)
+- `POST /api/tournaments/{tournamentId}/fights/{fightId}/result` (body `{ winnerId }` for a regular fight; a Freikampf is decided per side with `{ winnerSide: "White" | "Blue" }` and rejects `winnerId` with `400`; without a winner a Hiki-wake is recorded for team-matchday fights and, at the operator's discretion, for Freikämpfe)
+- `GET /api/tournaments/{tournamentId}/free-fights/{fightId}` (live operation roles; returns a Freikampf, `404` for any other fight)
+- `POST /api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fights` (live operation roles; adds a Freikampf: `white`/`blue` each `{ athleteId }` or `{ name }` (max. 60 chars, no control or invisible formatting characters), `matchDurationSeconds` (30-3600, default 240), `goldenScoreEnabled`, `goldenScoreDurationSeconds` (30-3600, default 180), `placeNext`; it is queued behind all waiting fights of the tatami, including those whose athletes are still open, or with `placeNext` directly behind the running or current fight; returns `201` with the fight and a `Location` of its `GET` endpoint, `400` for an invalid name or time, a side without name or the same athlete twice, `404` for an unknown tatami or athlete)
 - `PUT /api/tournaments/{tournamentId}/free-fights/{fightId}` (same body without `placeNext`; `409` once the Freikampf has started)
-- `DELETE /api/tournaments/{tournamentId}/free-fights/{fightId}` (`409` once the Freikampf has started)
+- `DELETE /api/tournaments/{tournamentId}/free-fights/{fightId}` (`409` once the Freikampf has started; clients are told to reload the tatami queue with the SignalR event `TatamiQueueChanged`)
 - `GET /api/tournaments/{tournamentId}/completed-fights` (Admin/Operator; enriched summaries of finished fights)
 - `GET /api/tournaments/{tournamentId}/overview-stats` (authenticated; whole-tournament registered athletes, clubs, categories, fight progress, average duration and ippon count)
 - `POST /api/tournaments/{tournamentId}/completed-fights/{fightId}/edit-result` (Admin; correct scores and winner with a confirmation flow for affected downstream fights)

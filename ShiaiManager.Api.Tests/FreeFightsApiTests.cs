@@ -42,6 +42,8 @@ public sealed class FreeFightsApiTests : IClassFixture<TournamentFlowSmokeTests.
         var fight = (await created.Content.ReadFromJsonAsync<Fight>(JsonOptions))!;
         Assert.Null(fight.CategoryId);
         Assert.Equal(new FreeFightDetails("Gast 1", "Gast 2", 120, false, 180, null), fight.FreeFight);
+        var location = await client.GetFromJsonAsync<Fight>(created.Headers.Location, JsonOptions);
+        Assert.Equal(fight.Id, location!.Id);
 
         var queue = await client.GetFromJsonAsync<TatamiQueue>(
             $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue", JsonOptions);
@@ -53,12 +55,34 @@ public sealed class FreeFightsApiTests : IClassFixture<TournamentFlowSmokeTests.
         var deleteStarted = await client.DeleteAsync($"/api/tournaments/{tournamentId}/free-fights/{fight.Id}");
         Assert.Equal(HttpStatusCode.Conflict, deleteStarted.StatusCode);
 
-        var result = await client.PostAsJsonAsync($"{fightPath}/result", new { winnerSide = "blue" });
+        var byAthlete = await client.PostAsJsonAsync($"{fightPath}/result", new { winnerId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.BadRequest, byAthlete.StatusCode);
+        var unknownSide = await client.PostAsJsonAsync($"{fightPath}/result", new { winnerSide = "red" });
+        Assert.Equal(HttpStatusCode.BadRequest, unknownSide.StatusCode);
+
+        var result = await client.PostAsJsonAsync($"{fightPath}/result", new { winnerSide = "Blue" });
         Assert.Equal(HttpStatusCode.NoContent, result.StatusCode);
 
         var after = await client.GetFromJsonAsync<TatamiQueue>(
             $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue", JsonOptions);
         Assert.Null(after!.Current);
+        var completed = await client.GetFromJsonAsync<Fight>(created.Headers.Location, JsonOptions);
+        Assert.Equal(FightSide.Blue, completed!.FreeFight!.WinnerSide);
+    }
+
+    [Theory]
+    [InlineData("Gast\u0007")]
+    [InlineData("Gast\u202E1")]
+    public async Task Freikampf_NameWithControlCharacters_Returns400(string name)
+    {
+        using var client = _factory.CreateClient();
+        var (tournamentId, tatamiId) = await SeedTournamentWithTatamiAsync(client);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fights",
+            new { white = new { name }, blue = new { name = "Blau" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
