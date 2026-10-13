@@ -292,6 +292,22 @@ describe('DisplayComponent', () => {
     fixture.destroy();
   });
 
+  it('shows whole seconds only, also in the last ten seconds and in golden score', () => {
+    const fixture = TestBed.createComponent(DisplayComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as any;
+    const now = new Date('2026-09-04T10:10:00.000Z').getTime();
+    component.nowEpochMs.set(now);
+
+    const regular = createFight({ status: 'InProgress', startedAtUtc: new Date(now - 294_500).toISOString() });
+    const golden = createFight({ status: 'InProgress', isGoldenScore: true, startedAtUtc: new Date(now - 475_500).toISOString() });
+
+    expect(component.timerForFight(regular)).toBe('00:06');
+    expect(component.timerForFight(golden)).toBe('00:05');
+
+    fixture.destroy();
+  });
+
   function renderWithHansokuMake(paramMap: Record<string, string>): HTMLElement {
     apiCalls.getTatamis.mockReturnValue(of([createTatami()]));
     apiCalls.getTatamiQueue.mockReturnValue(of({ current: createFight({ bluePenalties: 3, whiteIpponCount: 1 }), upcoming: [] }));

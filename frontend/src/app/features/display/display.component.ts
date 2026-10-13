@@ -570,18 +570,10 @@ export class DisplayComponent implements OnInit, OnDestroy {
     // Use fight.isGoldenScore from server (reload-safe, score-aware).
     if (fight.isGoldenScore) {
       const gsElapsed = elapsedSeconds - matchDuration;
-      const gsRemaining = Math.max(0, goldenScoreDuration - gsElapsed);
-      const showTenths = fight.status === 'InProgress' && gsRemaining <= 10;
-      return showTenths
-        ? this.formatTenthsCountdown(gsRemaining)
-        : this.formatWholeSeconds(gsRemaining);
+      return this.formatWholeSeconds(Math.max(0, goldenScoreDuration - gsElapsed));
     }
 
-    const remainingSeconds = Math.max(0, matchDuration - elapsedSeconds);
-    const showTenths = fight.status === 'InProgress' && remainingSeconds <= 10;
-    return showTenths
-      ? this.formatTenthsCountdown(remainingSeconds)
-      : this.formatWholeSeconds(remainingSeconds);
+    return this.formatWholeSeconds(Math.max(0, matchDuration - elapsedSeconds));
   }
 
   /** Splits the timer label around its minutes:seconds colon so the colon can
@@ -599,15 +591,6 @@ export class DisplayComponent implements OnInit, OnDestroy {
     const m = Math.floor(rounded / 60);
     const s = rounded % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }
-
-  private formatTenthsCountdown(seconds: number): string {
-    const clamped = Math.max(0, seconds);
-    const wholeSeconds = Math.floor(clamped);
-    const tenths = Math.floor((clamped - wholeSeconds) * 10);
-    const m = Math.floor(wholeSeconds / 60);
-    const s = wholeSeconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${tenths}`;
   }
 
   protected athleteName(id: string | null): string {
