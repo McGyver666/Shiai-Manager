@@ -266,6 +266,29 @@ describe('MatchComponent', () => {
         fixture.destroy();
       });
 
+      it('promotes the first queued fight to the current slot while the current fight has not started', () => {
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight({ status: 'Pending', startedAtUtc: null, completedAtUtc: null }), UPCOMING)));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        clickEnabled(fixture, '.upcoming-item__move');
+
+        expect(apiMock.moveFightInQueue).toHaveBeenCalledWith('tournament-1', 'fight-2', 'Up');
+        fixture.destroy();
+      });
+
+      it.each<Partial<Fight>>([
+        { status: 'InProgress', completedAtUtc: null },
+        { status: 'Paused', completedAtUtc: null },
+      ])('keeps the first queued fight in the queue while the current fight is $status', (fight) => {
+        getTatamiQueueSpy.mockReturnValue(of(queueWith(createFight(fight), UPCOMING)));
+        const fixture = TestBed.createComponent(MatchComponent);
+        fixture.detectChanges();
+
+        expect(button(fixture, '.upcoming-item__move').disabled).toBe(true);
+        fixture.destroy();
+      });
+
       it('stops a running fight, records and removes scores, starts Osae-komi, and reorders the queue', () => {
         getTatamiQueueSpy.mockReturnValue(of(queueWith(runningFight(), UPCOMING)));
         const fixture = TestBed.createComponent(MatchComponent);

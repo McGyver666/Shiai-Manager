@@ -649,7 +649,8 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   protected canMoveUp(index: number): boolean {
-    return this.canOperateLive() && index > 0;
+    // Index 0 swaps with the current fight, which is only allowed before it starts.
+    return this.canOperateLive() && (index > 0 || this.currentFight()?.status === 'Pending');
   }
 
   protected canMoveDown(index: number): boolean {
