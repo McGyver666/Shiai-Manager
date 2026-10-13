@@ -203,7 +203,7 @@ describe('DisplayComponent', () => {
     fightUpdates.next(activeHold);
     fightUpdates.next(stoppedFight);
 
-    expect((fixture.componentInstance as any).osaeKomiSecondsLabel(stoppedFight)).toBe('5.4s');
+    expect((fixture.componentInstance as any).osaeKomiSecondsLabel(stoppedFight)).toBe('5.4');
 
     fixture.destroy();
   });
@@ -222,7 +222,7 @@ describe('DisplayComponent', () => {
     });
 
     expect(component.isOsaeKomiPaused(pausedHold)).toBe(true);
-    expect(component.osaeKomiSecondsLabel(pausedHold)).toBe('3.4s');
+    expect(component.osaeKomiSecondsLabel(pausedHold)).toBe('3.4');
 
     fixture.destroy();
   });
@@ -255,7 +255,7 @@ describe('DisplayComponent', () => {
     fightUpdates.next(activeHold);
     fightUpdates.next(stoppedFight);
 
-    expect(component.osaeKomiCapSecondsLabel(stoppedFight)).toBe('20s');
+    expect(component.osaeKomiCapSecondsLabel(stoppedFight)).toBe('20');
 
     fixture.destroy();
   });

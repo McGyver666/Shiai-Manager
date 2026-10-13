@@ -399,12 +399,12 @@ export class DisplayComponent implements OnInit, OnDestroy {
       const runningSeconds = Math.min(capSeconds, Math.max(0, Math.ceil(elapsedExactSeconds)));
       const remainingToCap = Math.max(0, capSeconds - elapsedExactSeconds);
       const showTenths = fight.osaeKomiPausedAtUtc !== null || remainingToCap <= 10;
-      return showTenths ? `${elapsedExactSeconds.toFixed(1)}s` : `${runningSeconds}s`;
+      return showTenths ? elapsedExactSeconds.toFixed(1) : `${runningSeconds}`;
     }
 
     const persisted = this.persistedOsaeKomiMap.get(fight.id);
     if (persisted) {
-      return `${persisted.seconds.toFixed(1)}s`;
+      return persisted.seconds.toFixed(1);
     }
 
     return '--';
@@ -418,10 +418,10 @@ export class DisplayComponent implements OnInit, OnDestroy {
 
     const persisted = this.persistedOsaeKomiMap.get(fight.id);
     if (!this.isOsaeKomiRunning(fight) && persisted) {
-      return `${persisted.cap}s`;
+      return `${persisted.cap}`;
     }
 
-    return `${this.getOsaeKomiCapForFight(fight, side)}s`;
+    return `${this.getOsaeKomiCapForFight(fight, side)}`;
   }
 
   private hasWazaAri(fight: Fight, side: FightSide): boolean {

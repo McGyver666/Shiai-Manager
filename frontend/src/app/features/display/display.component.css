@@ -152,10 +152,13 @@
 
 .hold-timer,
 .hold-timer-spacer {
+	--hold-value-size: clamp(2.4rem, 5.5vw, 4.5rem);
 	justify-self: center;
-	align-self: stretch;
-	min-width: 20rem;
-	min-height: clamp(6.5rem, 13vw, 10rem);
+	align-self: center;
+	box-sizing: border-box;
+	/* Fixed width (fits "20.0 / 20") so showing the hold never shifts its neighbours. */
+	width: calc(var(--hold-value-size) * 4.4);
+	min-height: clamp(5.5rem, 10vw, 8rem);
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
@@ -201,11 +204,11 @@
 
 .hold-timer-value {
 	font-family: var(--ff-mono);
-	font-size: clamp(3.1rem, 9.6vw, 7.2rem);
+	font-size: var(--hold-value-size);
 	font-weight: 900;
 	font-variant-numeric: tabular-nums;
-	/* Reserve the widest label ("20.0s") so the box doesn't jitter while counting. */
-	min-width: 5ch;
+	/* Reserve the widest label ("20.0") so the box doesn't jitter while counting. */
+	min-width: 4ch;
 	text-align: right;
 }
 
@@ -219,11 +222,11 @@
 
 .hold-timer-target {
 	font-family: var(--ff-mono);
-	font-size: clamp(1.4rem, 2.8vw, 2.1rem);
+	font-size: calc(var(--hold-value-size) * 0.38);
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	opacity: .9;
-	min-width: 5ch;
+	min-width: 4ch;
 	text-align: left;
 }
 
