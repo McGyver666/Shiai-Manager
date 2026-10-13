@@ -131,8 +131,8 @@
                       }
                     </div>
                     <div class="score-row__actions">
-                        <button class="btn btn--tiny btn--positive" [disabled]="!canOperate() || !canRecordScore(fight) || !canAddScore(fight, 'white', scoreType)" (click)="adjustScore(fight, 'white', scoreType, 1)">+</button>
-                        <button class="btn btn--tiny btn--negative" [disabled]="!canOperate() || !canRecordScore(fight) || !canRemoveScore(fight, 'white', scoreType)" (click)="adjustScore(fight, 'white', scoreType, -1)">−</button>
+                        <button class="btn btn--tiny btn--positive" [disabled]="!canOperateActiveFight(fight) || !canAddScore(fight, 'white', scoreType)" (click)="adjustScore(fight, 'white', scoreType, 1)">+</button>
+                        <button class="btn btn--tiny btn--negative" [disabled]="!canOperateActiveFight(fight) || !canRemoveScore(fight, 'white', scoreType)" (click)="adjustScore(fight, 'white', scoreType, -1)">−</button>
                     </div>
                   </div>
                 }
@@ -149,13 +149,13 @@
 
               <div class="fight-controls">
                 @if (fight.status === 'Pending') {
-                  <button class="btn btn--primary btn--full btn--fight-start-stop" [disabled]="!canOperate()" (click)="startFight(fight)">{{ 'match.startFight' | t }}</button>
+                  <button class="btn btn--primary btn--full btn--fight-start-stop" [disabled]="!canOperateLive()" (click)="startFight(fight)">{{ 'match.startFight' | t }}</button>
                 }
                 @if (fight.status === 'InProgress') {
-                  <button class="btn btn--secondary btn--full btn--fight-start-stop" [disabled]="!canOperate()" (click)="pauseFight(fight)">{{ 'match.stopFight' | t }}</button>
+                  <button class="btn btn--secondary btn--full btn--fight-start-stop" [disabled]="!canOperateLive()" (click)="stopFight(fight)">{{ 'match.stopFight' | t }}</button>
                 }
                 @if (fight.status === 'Paused') {
-                  <button class="btn btn--primary btn--full btn--fight-start-stop" [disabled]="!canOperate()" (click)="resumeFight(fight)">{{ 'match.resumeFight' | t }}</button>
+                  <button class="btn btn--primary btn--full btn--fight-start-stop" [disabled]="!canOperateLive()" (click)="resumeFight(fight)">{{ 'match.resumeFight' | t }}</button>
                 }
               </div>
 
@@ -165,10 +165,10 @@
                   <span class="osae-card__timer">{{ holdTimerLabel() }}</span>
                 </div>
                 <div class="osae-card__controls">
-                  <button class="btn btn--tiny btn--white" [disabled]="!canOperate() || !canRecordScore(fight) || !canStartOsaeKomi(fight, 'white')" (click)="startOsaeKomi(fight, 'white')">{{ 'match.startOsaeWhite' | t }}</button>
-                  <button class="btn btn--tiny btn--secondary" [disabled]="!canOperate() || !canRecordScore(fight) || osaeKomiSide() === null" (click)="stopOsaeKomi(fight)">{{ 'match.stopOsae' | t }}</button>
-                  <button class="btn btn--tiny btn--secondary" [disabled]="!canOperate() || !canRecordScore(fight) || osaeKomiSide() === null" (click)="toggleOsaeKomi(fight)">{{ osaeKomiToggleLabelKey() | t }}</button>
-                  <button class="btn btn--tiny btn--blue" [disabled]="!canOperate() || !canRecordScore(fight) || !canStartOsaeKomi(fight, 'blue')" (click)="startOsaeKomi(fight, 'blue')">{{ startOsaeLabelKey() | t }}</button>
+                  <button class="btn btn--tiny btn--white" [disabled]="!canOperateActiveFight(fight) || !canStartOsaeKomi(fight, 'white')" (click)="startOsaeKomi(fight, 'white')">{{ 'match.startOsaeWhite' | t }}</button>
+                  <button class="btn btn--tiny btn--secondary" [disabled]="!canOperateActiveFight(fight) || osaeKomiSide() === null" (click)="stopOsaeKomi(fight)">{{ 'match.stopOsae' | t }}</button>
+                  <button class="btn btn--tiny btn--secondary" [disabled]="!canOperateActiveFight(fight) || osaeKomiSide() === null" (click)="toggleOsaeKomi(fight)">{{ osaeKomiToggleLabelKey() | t }}</button>
+                  <button class="btn btn--tiny btn--blue" [disabled]="!canOperateActiveFight(fight) || !canStartOsaeKomi(fight, 'blue')" (click)="startOsaeKomi(fight, 'blue')">{{ startOsaeLabelKey() | t }}</button>
                 </div>
                 <div class="osae-card__note" [class.osae-card__note--hidden]="osaeKomiSide() === null" [attr.aria-hidden]="osaeKomiSide() === null">
                   @if (osaeKomiSide(); as holdSide) {
@@ -182,11 +182,11 @@
 
               @if (fight.status === 'InProgress' || fight.status === 'Paused') {
                 <div class="confirm-row" [class.confirm-row--team-matchday]="context.tournament()?.competitionMode === 'TeamMatchday'">
-                  <button class="btn btn--confirm btn--white" [disabled]="!canOperate()" (click)="confirmWinner(fight, fight.whiteAthleteId!)">{{ 'match.confirmWhiteWins' | t }}</button>
+                  <button class="btn btn--confirm btn--white" [disabled]="!canOperateLive()" (click)="confirmWinner(fight, fight.whiteAthleteId!)">{{ 'match.confirmWhiteWins' | t }}</button>
                   @if (context.tournament()?.competitionMode === 'TeamMatchday') {
-                    <button class="btn btn--confirm btn--draw" [disabled]="!canOperate()" (click)="confirmDraw(fight)">{{ 'match.confirmHikiwake' | t }}</button>
+                    <button class="btn btn--confirm btn--draw" [disabled]="!canOperateLive()" (click)="confirmDraw(fight)">{{ 'match.confirmHikiwake' | t }}</button>
                   }
-                  <button class="btn btn--confirm btn--blue" [disabled]="!canOperate()" (click)="confirmWinner(fight, fight.blueAthleteId!)">{{ confirmWinnerLabelKey() | t }}</button>
+                  <button class="btn btn--confirm btn--blue" [disabled]="!canOperateLive()" (click)="confirmWinner(fight, fight.blueAthleteId!)">{{ confirmWinnerLabelKey() | t }}</button>
                 </div>
               }
             </article>
@@ -228,8 +228,8 @@
                       }
                     </div>
                     <div class="score-row__actions">
-                        <button class="btn btn--tiny btn--positive" [disabled]="!canOperate() || !canRecordScore(fight) || !canAddScore(fight, 'blue', scoreType)" (click)="adjustScore(fight, 'blue', scoreType, 1)">+</button>
-                        <button class="btn btn--tiny btn--negative" [disabled]="!canOperate() || !canRecordScore(fight) || !canRemoveScore(fight, 'blue', scoreType)" (click)="adjustScore(fight, 'blue', scoreType, -1)">−</button>
+                        <button class="btn btn--tiny btn--positive" [disabled]="!canOperateActiveFight(fight) || !canAddScore(fight, 'blue', scoreType)" (click)="adjustScore(fight, 'blue', scoreType, 1)">+</button>
+                        <button class="btn btn--tiny btn--negative" [disabled]="!canOperateActiveFight(fight) || !canRemoveScore(fight, 'blue', scoreType)" (click)="adjustScore(fight, 'blue', scoreType, -1)">−</button>
                     </div>
                   </div>
                 }

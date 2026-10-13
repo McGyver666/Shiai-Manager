@@ -223,19 +223,19 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
             (HttpMethod.Get, $"/api/tournaments/{tournamentId}/categories/{categoryId}/rankings", null),
             (HttpMethod.Get, $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue", null),
             (HttpMethod.Get, $"/api/tournaments/{tournamentId}/team-matchday/encounters/{Guid.NewGuid()}/lineups/1", null),
-            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/queue-move", JsonContent.Create(new { Direction = "Up" })),
-            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/start", null),
-            (HttpMethod.Post, $"/api/tournaments/{tournamentId}/fights/{fightId}/result", JsonContent.Create(new { WinnerId = Guid.NewGuid() })),
-        };
+        }.Concat(LiveFightOperationRequests(tournamentId, fightId));
 
         foreach (var request in requests)
         {
             using var message = new HttpRequestMessage(request.Method, request.Uri) { Content = request.Content };
             using var response = await client.SendAsync(message);
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
 
+            // A ProblemDetails 404 comes from the action; an unmatched route would not produce one.
             Assert.True(
-                response.StatusCode is HttpStatusCode.OK or HttpStatusCode.NotFound,
-                $"Competition request {request.Method} {request.Uri} was rejected with {response.StatusCode}.");
+                (response.StatusCode is HttpStatusCode.OK && mediaType == "application/json")
+                    || (response.StatusCode is HttpStatusCode.NotFound && mediaType == "application/problem+json"),
+                $"Competition request {request.Method} {request.Uri} did not reach the action: {response.StatusCode} ({mediaType}).");
         }
     }
 
@@ -278,10 +278,50 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
         var token = await LoginAndGetTokenAsync(client, "display-live", "Display!1234");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.PostAsync(
-            $"/api/tournaments/{Guid.NewGuid()}/fights/{Guid.NewGuid()}/start", null);
+        foreach (var request in LiveFightOperationRequests(Guid.NewGuid(), Guid.NewGuid()))
+        {
+            using var message = new HttpRequestMessage(request.Method, request.Uri) { Content = request.Content };
+            using var response = await client.SendAsync(message);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.True(
+                response.StatusCode is HttpStatusCode.Forbidden,
+                $"Display request {request.Method} {request.Uri} returned {response.StatusCode}.");
+        }
+    }
+
+    [Fact]
+    public async Task AnonymousCaller_CannotOperateLiveFight()
+    {
+        using var client = _factory.CreateClient();
+
+        foreach (var request in LiveFightOperationRequests(Guid.NewGuid(), Guid.NewGuid()))
+        {
+            using var message = new HttpRequestMessage(request.Method, request.Uri) { Content = request.Content };
+            using var response = await client.SendAsync(message);
+
+            Assert.True(
+                response.StatusCode is HttpStatusCode.Unauthorized,
+                $"Anonymous request {request.Method} {request.Uri} returned {response.StatusCode}.");
+        }
+    }
+
+    /// <summary>Every write endpoint the match control (/match) calls under the LiveFightOperation policy.</summary>
+    private static (HttpMethod Method, string Uri, HttpContent? Content)[] LiveFightOperationRequests(Guid tournamentId, Guid fightId)
+    {
+        var fight = $"/api/tournaments/{tournamentId}/fights/{fightId}";
+        return
+        [
+            (HttpMethod.Post, $"{fight}/queue-move", JsonContent.Create(new { Direction = "Up" })),
+            (HttpMethod.Post, $"{fight}/start", null),
+            (HttpMethod.Post, $"{fight}/stop", null),
+            (HttpMethod.Post, $"{fight}/resume", null),
+            (HttpMethod.Post, $"{fight}/score/adjust", JsonContent.Create(new { Side = "white", ScoreType = "Ippon", Delta = 1 })),
+            (HttpMethod.Post, $"{fight}/osae-komi/start", JsonContent.Create(new { Side = "white" })),
+            (HttpMethod.Post, $"{fight}/osae-komi/stop", null),
+            (HttpMethod.Post, $"{fight}/osae-komi/pause", null),
+            (HttpMethod.Post, $"{fight}/osae-komi/resume", null),
+            (HttpMethod.Post, $"{fight}/result", JsonContent.Create(new { WinnerId = Guid.NewGuid() })),
+        ];
     }
 
     [Theory]

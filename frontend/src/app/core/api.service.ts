@@ -48,7 +48,6 @@ import {
   PublicClub,
   QueueMoveDirection,
   RankingEntry,
-  RecordScoreRequest,
   ResetUserPasswordRequest,
   Registration,
   RegistrationDetail,
@@ -412,7 +411,7 @@ export class ApiService {
       `api/tournaments/${tournamentId}/fights/${fightId}/start`, {});
   }
 
-  pauseFight(tournamentId: string, fightId: string, userName: string): Observable<void> {
+  stopFight(tournamentId: string, fightId: string, userName: string): Observable<void> {
     void userName;
     return this.http.post<void>(
       `api/tournaments/${tournamentId}/fights/${fightId}/stop`, {});
@@ -422,17 +421,6 @@ export class ApiService {
     void userName;
     return this.http.post<void>(
       `api/tournaments/${tournamentId}/fights/${fightId}/resume`, {});
-  }
-
-  recordScore(
-    tournamentId: string,
-    fightId: string,
-    body: RecordScoreRequest,
-    userName: string,
-  ): Observable<void> {
-    void userName;
-    return this.http.put<void>(
-      `api/tournaments/${tournamentId}/fights/${fightId}/score`, body);
   }
 
   adjustScore(
