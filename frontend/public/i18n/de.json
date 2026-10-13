@@ -663,6 +663,7 @@
   "tatamiAssignment.unknownCategory": "Unbekannte Gewichtsklasse",
   "tatamiAssignment.alreadyAssigned": "Alle zuweisbaren Kämpfe sind bereits auf Matten verteilt.",
   "tatamiAssignment.autoAssignDone": "{count} Kämpfe wurden automatisch auf Matten verteilt.",
+  "tatamiAssignment.startedFightConflict": "Ein Kampf wurde inzwischen gestartet und bleibt auf seiner Matte. Die Liste wurde neu geladen, bitte die Zuweisung wiederholen.",
   "tatamiAssignment.assignCategory": "Gewichtsklasse zuweisen",
   "tatamiAssignment.round": "Runde",
   "tatamiAssignment.fight": "Kampf",

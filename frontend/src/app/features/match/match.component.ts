@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   ChangeDetectionStrategy
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -98,8 +99,9 @@ export class MatchComponent implements OnInit, OnDestroy {
 
   /** Track the previous fight to detect osae-komi transitions and cleanup. */
   private previousFight: Fight | null = null;
-  /** When osae-komi ends, store the frozen display until a new one starts or fight resumes. */
-  private frozenOsaeKomiDisplay: { seconds: number; cap: number; side: FightSide } | null = null;
+  /** When osae-komi ends, store the frozen display until a new one starts, the fight resumes or another fight becomes current. */
+  private frozenOsaeKomiDisplay: { fightId: string; seconds: number; cap: number; side: FightSide } | null = null;
+  private categoriesRequest: Subscription | null = null;
 
   protected readonly scoreTypes: ScoreType[] = ['Ippon', 'WazaAri', 'Yuko', 'Shido'];
 
@@ -158,7 +160,16 @@ export class MatchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.refreshQueue();
+    untracked(() => this.refreshQueue());
+  });
+
+  /** The clock captures category durations when it restarts, so restart it once categories arrive. */
+  private readonly categoriesEffect = effect(() => {
+    this.categories();
+    untracked(() => {
+      const q = this.queue();
+      if (q) this.restartTimer(q.current);
+    });
   });
 
   ngOnInit(): void {
@@ -205,7 +216,7 @@ export class MatchComponent implements OnInit, OnDestroy {
         });
       }
     });
-    this.api.getCategories(tid).subscribe(cats => this.categories.set(cats));
+    this.loadCategories(tid);
     this.api.getAthletes(tid).subscribe(athletes => {
       const map = new Map(athletes.map(a => [a.id, a]));
       this.athletes.set(map);
@@ -260,6 +271,7 @@ export class MatchComponent implements OnInit, OnDestroy {
     this.categoryFightsSub?.unsubscribe();
     this.serverTimeSub?.unsubscribe();
     this.reconnectSub?.unsubscribe();
+    this.categoriesRequest?.unsubscribe();
     this.stopTimer();
     this.stopTimeRefresh();
   }
@@ -276,6 +288,11 @@ export class MatchComponent implements OnInit, OnDestroy {
 
     this.refreshQueue();
     this.refreshAthletes();
+  }
+
+  private loadCategories(tournamentId: string): void {
+    this.categoriesRequest?.unsubscribe();
+    this.categoriesRequest = this.api.getCategories(tournamentId).subscribe(cats => this.categories.set(cats));
   }
 
   private refreshAthletes(): void {
@@ -393,6 +410,11 @@ export class MatchComponent implements OnInit, OnDestroy {
       next: q => {
         this.queue.set(q);
         this.restartTimer(q.current);
+        const categoryId = q.current?.categoryId;
+        const categoryLoadPending = this.categoriesRequest !== null && !this.categoriesRequest.closed;
+        if (categoryId && !categoryLoadPending && !this.categories().some(c => c.id === categoryId)) {
+          this.loadCategories(tid);
+        }
       },
       error: () => this.errorMessage.set(this.i18n.translate('match.queueLoadFailed')),
     });
@@ -401,8 +423,12 @@ export class MatchComponent implements OnInit, OnDestroy {
   private restartTimer(fight: Fight | null): void {
     this.stopTimer();
 
-    // Detect osae-komi transitions before resetting state.
-    if (this.previousFight !== null && fight !== null) {
+    if (this.frozenOsaeKomiDisplay && this.frozenOsaeKomiDisplay.fightId !== fight?.id) {
+      this.frozenOsaeKomiDisplay = null;
+    }
+
+    // Detect osae-komi transitions of the same fight before resetting state.
+    if (this.previousFight !== null && fight !== null && this.previousFight.id === fight.id) {
       const prevHadOsaeKomi = this.previousFight.osaeKomiSide !== null;
       const newHasOsaeKomi = fight.osaeKomiSide !== null;
       const wasPausedNowRunning = this.previousFight.status === 'Paused' && fight.status === 'InProgress';
@@ -411,13 +437,13 @@ export class MatchComponent implements OnInit, OnDestroy {
       if (prevHadOsaeKomi && !newHasOsaeKomi && !wasPausedNowRunning) {
         const serverStoppedDisplay = this.getServerStoppedOsaeKomiDisplay(this.previousFight, fight);
         if (serverStoppedDisplay) {
-          this.frozenOsaeKomiDisplay = serverStoppedDisplay;
+          this.frozenOsaeKomiDisplay = { fightId: fight.id, ...serverStoppedDisplay };
         } else if (!isNowPaused) {
           const s = this.osaeKomiSeconds();
           const c = this.osaeKomiCapSeconds();
           const side = this.osaeKomiSide();
           if (s !== null && c !== null && side !== null) {
-            this.frozenOsaeKomiDisplay = { seconds: s, cap: c, side };
+            this.frozenOsaeKomiDisplay = { fightId: fight.id, seconds: s, cap: c, side };
           }
         }
       }

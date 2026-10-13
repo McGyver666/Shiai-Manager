@@ -93,8 +93,8 @@ category whose athlete count changes away from two loses its draw. Fights of a s
 - `POST /api/tournaments/{tournamentId}/category-presets/reset-defaults`
 
 - `GET /api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue`
-- `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami`
-- `POST /api/tournaments/{tournamentId}/fights/assign-tatami-bulk` (assign many fights to tatamis atomically)
+- `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami` (a started fight (`InProgress`, `Paused`, `Completed`) stays on its tatami; moving or unassigning it returns `409`)
+- `POST /api/tournaments/{tournamentId}/fights/assign-tatami-bulk` (assign many fights to tatamis atomically; if any started fight would change its tatami, nothing is changed and `409` is returned)
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/queue-move`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/start`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/stop`

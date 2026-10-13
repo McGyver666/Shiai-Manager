@@ -1440,6 +1440,127 @@ public sealed class MatchServiceTests
         Assert.Equal(MatchActionResult.FightNotFound, result);
     }
 
+    private static async Task<(Guid TournamentId, Guid CategoryId, Guid TatamiA, Guid TatamiB)> SeedTwoTatamisAsync(
+        string db, int athleteCount)
+    {
+        Guid tid, cid;
+        await using (var ctx = CreateDbContext(db))
+        {
+            await ctx.Database.EnsureCreatedAsync();
+            (tid, cid, _) = await SeedBracketAsync(ctx, athleteCount);
+        }
+
+        await using var ctx2 = CreateDbContext(db);
+        var store = new SqliteTatamisStore(ctx2, NullLogger<SqliteTatamisStore>.Instance);
+        var a = await store.CreateAsync(tid, "Tatami 1", 0, CancellationToken.None);
+        var b = await store.CreateAsync(tid, "Tatami 2", 1, CancellationToken.None);
+        return (tid, cid, a.Id, b.Id);
+    }
+
+    private static async Task SetFightStateAsync(string db, Guid fightId, string status, Guid? tatamiId)
+    {
+        await using var ctx = CreateDbContext(db);
+        var fight = await ctx.Fights.SingleAsync(f => f.Id == fightId);
+        fight.Status = status;
+        fight.TatamiId = tatamiId;
+        fight.StartedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-30);
+        fight.PausedAtUtc = status == FightStatus.Paused.ToString() ? DateTimeOffset.UtcNow : null;
+        await ctx.SaveChangesAsync();
+    }
+
+    [Theory]
+    [Trait("Category", "UnitTest")]
+    [InlineData(FightStatus.InProgress)]
+    [InlineData(FightStatus.Paused)]
+    [InlineData(FightStatus.Completed)]
+    public async Task AssignTatami_StartedFightToOtherTatami_ReturnsInvalidStateAndKeepsTatami(FightStatus status)
+    {
+        var db = CreateDatabasePath();
+        var (_, cid, tatamiA, tatamiB) = await SeedTwoTatamisAsync(db, 2);
+        var final = (await ReadFightsAsync(db, cid)).Single();
+        await SetFightStateAsync(db, final.Id, status.ToString(), tatamiA);
+
+        await using (var ctx = CreateDbContext(db))
+        {
+            Assert.Equal(MatchActionResult.InvalidState,
+                await CreateService(ctx).AssignTatamiAsync(final.Id, tatamiB, "Admin", CancellationToken.None));
+            Assert.Equal(MatchActionResult.InvalidState,
+                await CreateService(ctx).AssignTatamiAsync(final.Id, null, "Admin", CancellationToken.None));
+        }
+
+        Assert.Equal(tatamiA, (await ReadFightsAsync(db, cid)).Single().TatamiId);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AssignTatami_StartedFightToSameTatami_IsNoOpSuccess()
+    {
+        var db = CreateDatabasePath();
+        var (_, cid, tatamiA, _) = await SeedTwoTatamisAsync(db, 2);
+        var final = (await ReadFightsAsync(db, cid)).Single();
+        await SetFightStateAsync(db, final.Id, FightStatus.InProgress.ToString(), tatamiA);
+
+        await using (var ctx = CreateDbContext(db))
+        {
+            Assert.Equal(MatchActionResult.Success,
+                await CreateService(ctx).AssignTatamiAsync(final.Id, tatamiA, "Admin", CancellationToken.None));
+        }
+
+        Assert.Equal(tatamiA, (await ReadFightsAsync(db, cid)).Single().TatamiId);
+    }
+
+    [Theory]
+    [Trait("Category", "UnitTest")]
+    [InlineData(FightStatus.InProgress)]
+    [InlineData(FightStatus.Paused)]
+    public async Task AssignTatamiBulk_WithStartedFight_ReturnsInvalidStateAndChangesNothing(FightStatus status)
+    {
+        var db = CreateDatabasePath();
+        var (tid, cid, tatamiA, tatamiB) = await SeedTwoTatamisAsync(db, 4);
+        var fights = await ReadFightsAsync(db, cid);
+        var started = MainFight(fights, 1, 1);
+        await SetFightStateAsync(db, started.Id, status.ToString(), tatamiA);
+
+        var assignments = fights
+            .Select(f => new BulkTatamiAssignment { FightId = f.Id, TatamiId = tatamiB })
+            .ToList();
+
+        await using (var ctx = CreateDbContext(db))
+        {
+            var result = await CreateService(ctx)
+                .AssignTatamiBulkAsync(tid, assignments, "Admin", CancellationToken.None);
+            Assert.Equal(MatchActionResult.InvalidState, result);
+        }
+
+        var after = await ReadFightsAsync(db, cid);
+        Assert.Equal(tatamiA, after.Single(f => f.Id == started.Id).TatamiId);
+        Assert.All(after.Where(f => f.Id != started.Id), f => Assert.Null(f.TatamiId));
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
+    public async Task AssignTatamiBulk_StartedFightAlreadyOnTargetTatami_IsSkipped()
+    {
+        var db = CreateDatabasePath();
+        var (tid, cid, tatamiA, _) = await SeedTwoTatamisAsync(db, 4);
+        var fights = await ReadFightsAsync(db, cid);
+        var started = MainFight(fights, 1, 1);
+        await SetFightStateAsync(db, started.Id, FightStatus.InProgress.ToString(), tatamiA);
+
+        var assignments = fights
+            .Select(f => new BulkTatamiAssignment { FightId = f.Id, TatamiId = tatamiA })
+            .ToList();
+
+        await using (var ctx = CreateDbContext(db))
+        {
+            var result = await CreateService(ctx)
+                .AssignTatamiBulkAsync(tid, assignments, "Admin", CancellationToken.None);
+            Assert.Equal(MatchActionResult.Success, result);
+        }
+
+        Assert.All(await ReadFightsAsync(db, cid), f => Assert.Equal(tatamiA, f.TatamiId));
+    }
+
     // ─── StopOsaeKomi – Auto-Scoring ──────────────────────────────────────────
 
     /// <summary>Seeds a tournament+fight directly into the DB and starts the fight.</summary>

@@ -661,6 +661,7 @@
   "tatamiAssignment.unknownCategory": "Unknown category",
   "tatamiAssignment.alreadyAssigned": "All assignable fights are already distributed across tatamis.",
   "tatamiAssignment.autoAssignDone": "{count} fights were distributed to tatamis.",
+  "tatamiAssignment.startedFightConflict": "A fight has started in the meantime and stays on its tatami. The list was reloaded, please repeat the assignment.",
   "tatamiAssignment.assignCategory": "Assign category",
   "tatamiAssignment.round": "Round",
   "tatamiAssignment.fight": "Fight",
