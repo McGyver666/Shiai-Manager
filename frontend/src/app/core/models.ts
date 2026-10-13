@@ -454,10 +454,21 @@ export interface FightSeries {
   blueWins: number;
 }
 
+/** Freikampf data (ADR-0013); the free-text name is null for a side with a selected athlete. */
+export interface FreeFightDetails {
+  whiteName: string | null;
+  blueName: string | null;
+  matchDurationSeconds: number;
+  goldenScoreEnabled: boolean;
+  goldenScoreDurationSeconds: number;
+  winnerSide: 'White' | 'Blue' | null;
+}
+
 export interface Fight {
   id: string;
   tournamentId: string;
-  categoryId: string;
+  /** Null only for a Freikampf. */
+  categoryId: string | null;
   bracketType: FightBracketType;
   round: number;
   fightNumber: number;
@@ -493,6 +504,8 @@ export interface Fight {
   isGoldenScore: boolean;
   /** Set only for fights of a Kampfserie (Best of Three). */
   series?: FightSeries | null;
+  /** Set only for a Freikampf. */
+  freeFight?: FreeFightDetails | null;
   createdAtUtc: string;
   updatedAtUtc: string;
 }
@@ -614,6 +627,26 @@ export interface OsaeKomiRequest {
 
 export interface ConfirmResultRequest {
   winnerId: string | null;
+  /** Winning side of a Freikampf; takes precedence over winnerId. */
+  winnerSide?: FightSide | null;
+}
+
+/** One side of a Freikampf: an athlete of the tournament or a free-text name. */
+export interface FreeFightSideRequest {
+  athleteId: string | null;
+  name: string | null;
+}
+
+export interface FreeFightRequest {
+  white: FreeFightSideRequest;
+  blue: FreeFightSideRequest;
+  matchDurationSeconds: number;
+  goldenScoreEnabled: boolean;
+  goldenScoreDurationSeconds: number;
+}
+
+export interface CreateFreeFightRequest extends FreeFightRequest {
+  placeNext: boolean;
 }
 
 export interface AssignTatamiRequest {

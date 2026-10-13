@@ -231,6 +231,39 @@ describe('TournamentOverviewComponent', () => {
     fixture.destroy();
   });
 
+  it('shows a Freikampf with its label, free-text names and own fight time', () => {
+    configure(createTournament(), {
+      categoryId: null,
+      whiteAthleteId: null,
+      blueAthleteId: null,
+      startedAtUtc: null,
+      freeFight: {
+        whiteName: 'Gast 1',
+        blueName: 'Gast 2',
+        matchDurationSeconds: 90,
+        goldenScoreEnabled: false,
+        goldenScoreDurationSeconds: 180,
+        winnerSide: null,
+      },
+    });
+
+    const fixture = TestBed.createComponent(TournamentOverviewComponent);
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.tatami-category')?.textContent).toContain('freeFight.label');
+    expect(element.querySelector('.tatami-pairing')?.textContent).toContain('Gast 2');
+    expect(element.querySelector('.tatami-pairing')?.textContent).toContain('Gast 1');
+    expect((fixture.componentInstance as any).timerForFight({
+      categoryId: null,
+      startedAtUtc: null,
+      freeFight: { matchDurationSeconds: 90, goldenScoreDurationSeconds: 180 },
+    })).toBe('01:30');
+
+    fixture.destroy();
+  });
+
   it('replaces the hero shido bubbles with a Hansoku-make badge after the third shido', () => {
     configure(createTournament(), { whitePenalties: 3, blueIpponCount: 1 });
 

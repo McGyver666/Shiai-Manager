@@ -13,8 +13,15 @@ import { TranslatePipe } from '../../core/translate.pipe';
 
 const OPERATOR_NAME_KEY = 'judo.operatorName';
 
+/** Draw fights loaded per category; Freikämpfe have no category and are not assigned here. */
+type CategoryFight = Fight & { categoryId: string };
+
+function hasCategory(fight: Fight): fight is CategoryFight {
+  return fight.categoryId !== null;
+}
+
 interface FightAssignmentView {
-  fight: Fight;
+  fight: CategoryFight;
   categoryName: string;
   whiteName: string;
   blueName: string;
@@ -45,7 +52,7 @@ export class TatamiAssignmentComponent implements OnInit {
   protected readonly categories = signal<Category[]>([]);
   protected readonly tatamis = signal<Tatami[]>([]);
   protected readonly athletes = signal<Map<string, Athlete>>(new Map());
-  protected readonly fights = signal<Fight[]>([]);
+  protected readonly fights = signal<CategoryFight[]>([]);
   protected readonly loading = signal(false);
   protected readonly assigning = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -339,7 +346,7 @@ export class TatamiAssignmentComponent implements OnInit {
 
     forkJoin(categories.map((c) => this.api.getFights(id, c.id))).subscribe({
       next: (fightGroups) => {
-        this.fights.set(fightGroups.flat());
+        this.fights.set(fightGroups.flat().filter(hasCategory));
         this.loading.set(false);
       },
       error: (err) => {

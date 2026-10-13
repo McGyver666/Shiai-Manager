@@ -30,10 +30,12 @@ import {
   CreateAthleteRequest,
   CreateCategoryRequest,
   CreateClubRequest,
+  CreateFreeFightRequest,
   CreateRegistrationRequest,
   CreateTatamiRequest,
   CreateTournamentRequest,
   Fight,
+  FreeFightRequest,
   GenerateCategoriesRequest,
   GenerateDrawRequest,
   GlobalClubScoringResponse,
@@ -504,6 +506,18 @@ export class ApiService {
     const body: MoveFightInQueueRequest = { direction };
     return this.http.post<void>(
       `api/tournaments/${tournamentId}/fights/${fightId}/queue-move`, body);
+  }
+
+  createFreeFight(tournamentId: string, tatamiId: string, body: CreateFreeFightRequest): Observable<Fight> {
+    return this.http.post<Fight>(`api/tournaments/${tournamentId}/tatamis/${tatamiId}/free-fights`, body);
+  }
+
+  updateFreeFight(tournamentId: string, fightId: string, body: FreeFightRequest): Observable<Fight> {
+    return this.http.put<Fight>(`api/tournaments/${tournamentId}/free-fights/${fightId}`, body);
+  }
+
+  deleteFreeFight(tournamentId: string, fightId: string): Observable<void> {
+    return this.http.delete<void>(`api/tournaments/${tournamentId}/free-fights/${fightId}`);
   }
 
   // Rankings & Results -----------------------------------------------------

@@ -20,6 +20,7 @@ import { Athlete, Category, Club, Fight, FightSide, Tatami, TatamiQueue, Tournam
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 import { seriesScoreSides } from '../../shared/fight-series';
+import { fightClockSettings, fightSideName } from '../../shared/free-fight';
 import { I18nService } from '../../core/i18n.service';
 
 interface TatamiDisplay {
@@ -238,7 +239,7 @@ export class DisplayComponent implements OnInit, OnDestroy {
     const seen = new Set<string>();
     const ordered: string[] = [];
     for (const fight of queue.upcoming) {
-      if (!seen.has(fight.categoryId)) {
+      if (fight.categoryId !== null && !seen.has(fight.categoryId)) {
         seen.add(fight.categoryId);
         ordered.push(fight.categoryId);
       }
@@ -516,7 +517,8 @@ export class DisplayComponent implements OnInit, OnDestroy {
     return club?.name ?? '';
   }
 
-  protected categoryName(id: string): string {
+  protected categoryName(id: string | null): string {
+    if (id === null) return this.i18n.translate('freeFight.label');
     return this.categories().get(id)?.name ?? id.substring(0, 8);
   }
 
@@ -549,16 +551,14 @@ export class DisplayComponent implements OnInit, OnDestroy {
     const now = this.nowEpochMs();
     void now;
 
+    const category = fight.categoryId ? this.categories().get(fight.categoryId) : undefined;
+    const { matchDurationSeconds: matchDuration, goldenScoreDurationSeconds: goldenScoreDuration } =
+      fightClockSettings(fight, category);
+
     if (!fight.startedAtUtc) {
       // Fight not yet started: show configured match duration.
-      const cat = this.categories().get(fight.categoryId);
-      const matchDuration = cat?.matchDurationSeconds ?? 300;
       return this.formatWholeSeconds(matchDuration);
     }
-
-    const cat = this.categories().get(fight.categoryId);
-    const matchDuration = cat?.matchDurationSeconds ?? 300;
-    const goldenScoreDuration = cat?.goldenScoreDurationSeconds ?? 180;
 
     const timerReference = fight.osaeKomiPausedAtUtc
       ? new Date(fight.osaeKomiPausedAtUtc).getTime()
@@ -597,6 +597,10 @@ export class DisplayComponent implements OnInit, OnDestroy {
     if (!id) return '?';
     const a = this.athletes().get(id);
     return a ? `${a.lastName}, ${a.firstName}` : id.substring(0, 8);
+  }
+
+  protected sideName(fight: Fight, side: FightSide): string {
+    return fightSideName(fight, side, (id) => this.athleteName(id));
   }
 
 }

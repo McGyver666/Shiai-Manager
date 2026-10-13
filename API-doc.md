@@ -86,7 +86,9 @@ fights 1 and 2 (rounds 1 and 2); confirming fight 2 at a 1:1 series score create
 fight requires confirmation and writes a `DecidingFightRemoved` audit entry). An unlocked Best-of-Three
 category whose athlete count changes away from two loses its draw. Fights of a series carry
 `series` (`boutNumber`, `isDecidingFight`, `whiteWins`, `blueWins`); ranking entries carry
-`seriesWins`/`seriesLosses`.
+`seriesWins`/`seriesLosses`. A Freikampf has `categoryId: null` and a `freeFight` object (`whiteName`,
+`blueName`, `matchDurationSeconds`, `goldenScoreEnabled`, `goldenScoreDurationSeconds`, `winnerSide`);
+it never appears in category fights, rankings, club scoring, completed fights or overview statistics.
 
 - `GET/PUT /api/tournaments/{tournamentId}/category-presets`
 - `GET /api/tournaments/{tournamentId}/category-presets/warnings` (Admin/Operator; registrations without age group, presets that can never be a natural age group, categories whose age group has no preset)
@@ -104,7 +106,10 @@ category whose athlete count changes away from two loses its draw. Fights of a s
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/stop`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/pause`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/osae-komi/resume`
-- `POST /api/tournaments/{tournamentId}/fights/{fightId}/result`
+- `POST /api/tournaments/{tournamentId}/fights/{fightId}/result` (body `{ winnerId }`; for a Freikampf alternatively `{ winnerSide: "white" | "blue" }`; without a winner a Hiki-wake is recorded for team-matchday fights and Freikämpfe)
+- `POST /api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fights` (live operation roles; adds a Freikampf: `white`/`blue` each `{ athleteId }` or `{ name }` (max. 60 chars), `matchDurationSeconds` (30-3600, default 240), `goldenScoreEnabled`, `goldenScoreDurationSeconds` (30-3600, default 180), `placeNext`; returns `201` with the fight, `400` for a side without name or the same athlete twice, `404` for an unknown tatami or athlete)
+- `PUT /api/tournaments/{tournamentId}/free-fights/{fightId}` (same body without `placeNext`; `409` once the Freikampf has started)
+- `DELETE /api/tournaments/{tournamentId}/free-fights/{fightId}` (`409` once the Freikampf has started)
 - `GET /api/tournaments/{tournamentId}/completed-fights` (Admin/Operator; enriched summaries of finished fights)
 - `GET /api/tournaments/{tournamentId}/overview-stats` (authenticated; whole-tournament registered athletes, clubs, categories, fight progress, average duration and ippon count)
 - `POST /api/tournaments/{tournamentId}/completed-fights/{fightId}/edit-result` (Admin; correct scores and winner with a confirmation flow for affected downstream fights)

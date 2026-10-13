@@ -11,9 +11,11 @@ import {
   ChangeDetectionStrategy
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { AuthStateService } from '../../core/auth-state.service';
+import { extractApiError } from '../../core/http-error';
 import { I18nService } from '../../core/i18n.service';
 import { SideThemeService } from '../../core/side-theme.service';
 import { TimeService } from '../../core/time.service';
@@ -23,6 +25,7 @@ import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 import { seriesPositionLabel, seriesScoreSides } from '../../shared/fight-series';
+import { fightClockSettings, fightSideName, hasBothSides, isWinningSide } from '../../shared/free-fight';
 import {
   AdjustScoreRequest,
   Athlete,
@@ -31,6 +34,8 @@ import {
   Fight,
   FightSide,
   FightStatus,
+  FreeFightRequest,
+  FreeFightSideRequest,
   ScoreType,
   Tatami,
   TatamiQueue,
@@ -47,13 +52,32 @@ function isSpaceKey(event: KeyboardEvent): boolean {
 interface WinnerConfirmationState {
   fight: Fight;
   winnerId: string | null;
+  /** Winning side of a Freikampf; null for Hiki-wake and regular fights. */
+  winnerSide: FightSide | null;
   nextFight: Fight | null;
+}
+
+/** One side of the Freikampf dialog; an empty athleteId means free text. */
+interface FreeFightSideForm {
+  athleteId: string;
+  name: string;
+}
+
+interface FreeFightForm {
+  /** Null while creating a new Freikampf. */
+  fightId: string | null;
+  white: FreeFightSideForm;
+  blue: FreeFightSideForm;
+  matchDurationSeconds: number;
+  goldenScoreEnabled: boolean;
+  goldenScoreDurationSeconds: number;
+  placeNext: boolean;
 }
 
 @Component({
   selector: 'app-match',
   standalone: true,
-  imports: [TranslatePipe, ShidoIndicatorComponent, RunningScoreComponent],
+  imports: [FormsModule, TranslatePipe, ShidoIndicatorComponent, RunningScoreComponent],
   templateUrl: './match.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './match.component.css',
@@ -81,6 +105,12 @@ export class MatchComponent implements OnInit, OnDestroy {
   protected readonly loading = signal(false);
   protected readonly winnerConfirmation = signal<WinnerConfirmationState | null>(null);
   protected readonly confirmingWinner = signal(false);
+  protected readonly freeFightForm = signal<FreeFightForm | null>(null);
+  protected readonly freeFightSaving = signal(false);
+  protected readonly freeFightError = signal<string | null>(null);
+  protected readonly athleteOptions = computed(() =>
+    [...this.athletes().values()].sort((a, b) =>
+      a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)));
   protected readonly nowEpochMs = signal<number>(Date.now());
 
   /** Remaining seconds in the current fight's countdown. */
@@ -388,7 +418,7 @@ export class MatchComponent implements OnInit, OnDestroy {
   }
 
   private isKeyboardShortcutBlocked(event: KeyboardEvent): boolean {
-    if (this.winnerConfirmation() !== null) {
+    if (this.winnerConfirmation() !== null || this.freeFightForm() !== null) {
       return true;
     }
 
@@ -463,9 +493,7 @@ export class MatchComponent implements OnInit, OnDestroy {
 
     // Not started: show configured duration.
     if (!fight || !fight.startedAtUtc) {
-      const categoryId = fight?.categoryId;
-      const cat = categoryId ? this.categories().find(c => c.id === categoryId) : null;
-      const duration = cat?.matchDurationSeconds ?? 300;
+      const duration = fight ? this.clockSettings(fight).matchDurationSeconds : 300;
       this.timerSeconds.set(duration);
       this.timerRemainingExactSeconds.set(duration);
       this.timerIsGoldenScore.set(false);
@@ -477,10 +505,7 @@ export class MatchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const categoryId = fight.categoryId;
-    const cat = this.categories().find(c => c.id === categoryId);
-    const duration = cat?.matchDurationSeconds ?? 300;
-    const goldenScoreDuration = cat?.goldenScoreDurationSeconds ?? 180;
+    const { matchDurationSeconds: duration, goldenScoreDurationSeconds: goldenScoreDuration } = this.clockSettings(fight);
 
     const tick = () => {
       const nowMs = Date.now();
@@ -661,8 +686,21 @@ export class MatchComponent implements OnInit, OnDestroy {
     return this.insufficientRestAthleteIds().has(id);
   }
 
-  protected categoryName(id: string): string {
+  protected categoryName(id: string | null): string {
+    if (id === null) return this.i18n.translate('freeFight.label');
     return this.categories().find((category) => category.id === id)?.name ?? id;
+  }
+
+  protected sideName(fight: Fight, side: FightSide): string {
+    return fightSideName(fight, side, (id) => this.athleteName(id));
+  }
+
+  protected isWinningSide(fight: Fight, side: FightSide): boolean {
+    return isWinningSide(fight, side);
+  }
+
+  private clockSettings(fight: Fight) {
+    return fightClockSettings(fight, this.categories().find((category) => category.id === fight.categoryId));
   }
 
   /** Tournament id for a live match action, or null when the user may not operate the match control. */
@@ -676,8 +714,8 @@ export class MatchComponent implements OnInit, OnDestroy {
 
   protected canMoveUp(index: number): boolean {
     const fight = this.upcomingFights()[index];
-    // The server only reorders fights whose athletes are both known.
-    if (!this.canOperateLive() || !fight?.whiteAthleteId || !fight.blueAthleteId) return false;
+    // The server only reorders fights whose sides are both known.
+    if (!this.canOperateLive() || !fight || !hasBothSides(fight)) return false;
     // Index 0 swaps with the current fight, which is only allowed before it starts.
     return index > 0 || this.currentFight()?.status === 'Pending';
   }
@@ -782,8 +820,31 @@ export class MatchComponent implements OnInit, OnDestroy {
     this.winnerConfirmation.set({
       fight,
       winnerId,
+      winnerSide: null,
       nextFight: this.queue()?.next ?? null,
     });
+  }
+
+  /** A Freikampf records the winning side; a regular fight the winning athlete. */
+  protected confirmSideWins(fight: Fight, side: FightSide): void {
+    if (!fight.freeFight) {
+      const winnerId = side === 'white' ? fight.whiteAthleteId : fight.blueAthleteId;
+      if (winnerId) this.confirmWinner(fight, winnerId);
+      return;
+    }
+
+    if (!this.canOperateLive() || this.confirmingWinner()) return;
+    this.winnerConfirmation.set({
+      fight,
+      winnerId: null,
+      winnerSide: side,
+      nextFight: this.queue()?.next ?? null,
+    });
+  }
+
+  /** Hiki-wake is recorded for team-matchday fights and Freikämpfe. */
+  protected canConfirmDraw(fight: Fight): boolean {
+    return !!fight.freeFight || this.context.tournament()?.competitionMode === 'TeamMatchday';
   }
 
   protected confirmDraw(fight: Fight): void {
@@ -791,6 +852,7 @@ export class MatchComponent implements OnInit, OnDestroy {
     this.winnerConfirmation.set({
       fight,
       winnerId: null,
+      winnerSide: null,
       nextFight: this.queue()?.next ?? null,
     });
   }
@@ -810,7 +872,10 @@ export class MatchComponent implements OnInit, OnDestroy {
     if (!tid || !confirmation) return;
 
     this.confirmingWinner.set(true);
-    this.api.confirmResult(tid, confirmation.fight.id, { winnerId: confirmation.winnerId }, this.operatorName()).subscribe({
+    const body = confirmation.winnerSide
+      ? { winnerId: null, winnerSide: confirmation.winnerSide }
+      : { winnerId: confirmation.winnerId };
+    this.api.confirmResult(tid, confirmation.fight.id, body, this.operatorName()).subscribe({
       next: () => {
         this.winnerConfirmation.set(null);
         this.queue.set(null);
@@ -826,6 +891,100 @@ export class MatchComponent implements OnInit, OnDestroy {
 
   protected clearError(): void {
     this.errorMessage.set(null);
+  }
+
+  // ─── Freikampf (ADR-0013) ───
+
+  protected canEditFreeFight(fight: Fight): boolean {
+    return this.canOperateLive() && !!fight.freeFight && fight.status === 'Pending';
+  }
+
+  protected openCreateFreeFight(): void {
+    if (!this.canOperateLive()) return;
+    this.freeFightError.set(null);
+    this.freeFightForm.set({
+      fightId: null,
+      white: { athleteId: '', name: this.i18n.translate('match.whiteSide') },
+      blue: { athleteId: '', name: this.i18n.translate(this.sideTheme.accentSideLabelKey(this.context.tournament())) },
+      matchDurationSeconds: 240,
+      goldenScoreEnabled: false,
+      goldenScoreDurationSeconds: 180,
+      placeNext: false,
+    });
+  }
+
+  protected openEditFreeFight(fight: Fight): void {
+    if (!this.canEditFreeFight(fight) || !fight.freeFight) return;
+    this.freeFightError.set(null);
+    this.freeFightForm.set({
+      fightId: fight.id,
+      white: { athleteId: fight.whiteAthleteId ?? '', name: fight.freeFight.whiteName ?? '' },
+      blue: { athleteId: fight.blueAthleteId ?? '', name: fight.freeFight.blueName ?? '' },
+      matchDurationSeconds: fight.freeFight.matchDurationSeconds,
+      goldenScoreEnabled: fight.freeFight.goldenScoreEnabled,
+      goldenScoreDurationSeconds: fight.freeFight.goldenScoreDurationSeconds,
+      placeNext: false,
+    });
+  }
+
+  protected cancelFreeFight(): void {
+    if (this.freeFightSaving()) return;
+    this.freeFightForm.set(null);
+  }
+
+  /** Names of selected athletes that have not reached the tournament's minimum rest yet. */
+  protected freeFightRestWarnings(form: FreeFightForm): string[] {
+    return [form.white.athleteId, form.blue.athleteId]
+      .filter((id) => id && this.hasInsufficientRest(id))
+      .map((id) => this.athleteName(id));
+  }
+
+  protected saveFreeFight(): void {
+    const tid = this.liveTournamentId();
+    const tatamiId = this.selectedTatamiId();
+    const form = this.freeFightForm();
+    if (!tid || !tatamiId || !form || this.freeFightSaving()) return;
+
+    const body: FreeFightRequest = {
+      white: this.toFreeFightSide(form.white),
+      blue: this.toFreeFightSide(form.blue),
+      matchDurationSeconds: form.matchDurationSeconds,
+      goldenScoreEnabled: form.goldenScoreEnabled,
+      goldenScoreDurationSeconds: form.goldenScoreDurationSeconds,
+    };
+    const request = form.fightId
+      ? this.api.updateFreeFight(tid, form.fightId, body)
+      : this.api.createFreeFight(tid, tatamiId, { ...body, placeNext: form.placeNext });
+
+    this.freeFightSaving.set(true);
+    this.freeFightError.set(null);
+    request.subscribe({
+      next: () => {
+        this.freeFightSaving.set(false);
+        this.freeFightForm.set(null);
+        this.refreshQueue();
+      },
+      error: (err) => {
+        this.freeFightSaving.set(false);
+        this.freeFightError.set(extractApiError(
+          err, this.i18n.translate('freeFight.saveFailed'), (key) => this.i18n.translate(key)));
+      },
+    });
+  }
+
+  protected deleteFreeFight(fight: Fight): void {
+    const tid = this.liveTournamentId();
+    if (!tid || !this.canEditFreeFight(fight) || !confirm(this.i18n.translate('freeFight.deleteConfirm'))) return;
+
+    this.api.deleteFreeFight(tid, fight.id).subscribe({
+      next: () => this.refreshQueue(),
+      error: (err) => this.errorMessage.set(extractApiError(
+        err, this.i18n.translate('freeFight.deleteFailed'), (key) => this.i18n.translate(key))),
+    });
+  }
+
+  private toFreeFightSide(side: FreeFightSideForm): FreeFightSideRequest {
+    return side.athleteId ? { athleteId: side.athleteId, name: null } : { athleteId: null, name: side.name };
   }
 
   protected scoreCount(fight: Fight, side: FightSide, scoreType: ScoreType): number {

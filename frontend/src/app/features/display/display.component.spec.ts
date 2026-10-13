@@ -308,6 +308,46 @@ describe('DisplayComponent', () => {
     fixture.destroy();
   });
 
+  it('shows a Freikampf with its label, free-text names and own fight time on the tatami screen', () => {
+    apiCalls.getTatamis.mockReturnValue(of([createTatami()]));
+    const freeFight = createFight({
+      categoryId: null,
+      whiteAthleteId: null,
+      blueAthleteId: null,
+      status: 'Pending',
+      startedAtUtc: null,
+      freeFight: {
+        whiteName: 'Gast 1',
+        blueName: 'Gast 2',
+        matchDurationSeconds: 150,
+        goldenScoreEnabled: false,
+        goldenScoreDurationSeconds: 180,
+        winnerSide: null,
+      },
+    });
+    apiCalls.getTatamiQueue.mockReturnValue(of({ current: freeFight, upcoming: [freeFight] }));
+    TestBed.overrideProvider(ActivatedRoute, {
+      useValue: {
+        paramMap: of(convertToParamMap({ tatamiId: 'tatami-1' })),
+        queryParamMap: of(convertToParamMap({ tournamentId: 'tournament-1' })),
+      },
+    });
+    TestBed.overrideProvider(SideThemeService, {
+      useValue: { applyTheme: () => undefined, accentSideLabelKey: () => 'match.blueSide' },
+    });
+
+    const fixture = TestBed.createComponent(DisplayComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('.tatami-fullscreen-category')?.textContent).toContain('freeFight.label');
+    expect(root.querySelector('.tatami-athlete--white .tatami-athlete-name')?.textContent).toContain('Gast 1');
+    expect(root.querySelector('.tatami-athlete--blue .tatami-athlete-name')?.textContent).toContain('Gast 2');
+    expect((fixture.componentInstance as any).timerForFight(freeFight)).toBe('02:30');
+
+    fixture.destroy();
+  });
+
   function renderWithHansokuMake(paramMap: Record<string, string>): HTMLElement {
     apiCalls.getTatamis.mockReturnValue(of([createTatami()]));
     apiCalls.getTatamiQueue.mockReturnValue(of({ current: createFight({ bluePenalties: 3, whiteIpponCount: 1 }), upcoming: [] }));

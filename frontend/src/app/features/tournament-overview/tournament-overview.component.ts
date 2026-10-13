@@ -11,6 +11,7 @@ import { TranslatePipe } from '../../core/translate.pipe';
 import { HANSOKU_MAKE_SHIDO_COUNT, ShidoIndicatorComponent } from '../../shared/shido-indicator/shido-indicator.component';
 import { RunningScoreComponent, RunningScoreSide } from '../../shared/running-score/running-score.component';
 import { seriesPositionLabel, seriesScoreSides } from '../../shared/fight-series';
+import { fightClockSettings, fightSideName } from '../../shared/free-fight';
 import { canAutoRotateHero, nextHeroIndex } from './overview-hero-state';
 
 interface TatamiView {
@@ -234,17 +235,15 @@ export class TournamentOverviewComponent implements OnDestroy {
       return 0;
     }
 
-    const category = this.categories().get(fight.categoryId);
-    const duration = category?.matchDurationSeconds ?? 300;
+    const duration = this.clockSettings(fight).matchDurationSeconds;
     const elapsed = this.elapsedFightSeconds(fight);
     return Math.min(100, Math.max(0, (elapsed / Math.max(1, duration)) * 100));
   }
 
   protected timerForFight(fight: Fight): string {
     this.nowEpochMs();
-    const category = this.categories().get(fight.categoryId);
-    const matchDuration = category?.matchDurationSeconds ?? 300;
-    const goldenScoreDuration = category?.goldenScoreDurationSeconds ?? 180;
+    const { matchDurationSeconds: matchDuration, goldenScoreDurationSeconds: goldenScoreDuration } =
+      this.clockSettings(fight);
 
     if (!fight.startedAtUtc) {
       return this.formatWholeSeconds(matchDuration);
@@ -285,13 +284,22 @@ export class TournamentOverviewComponent implements OnDestroy {
     return athlete ? `${athlete.lastName}, ${athlete.firstName}` : this.i18n.translate('draw.tbd');
   }
 
+  protected sideName(fight: Fight, side: FightSide): string {
+    return fightSideName(fight, side, (id) => this.athleteName(id));
+  }
+
   protected athleteClub(id: string | null): string {
     const athlete = id ? this.athletes().get(id) : undefined;
     return athlete ? this.clubs().get(athlete.clubId)?.name ?? '' : '';
   }
 
-  protected categoryName(id: string): string {
+  protected categoryName(id: string | null): string {
+    if (id === null) return this.i18n.translate('freeFight.label');
     return this.categories().get(id)?.name ?? this.i18n.translate('draw.tbd');
+  }
+
+  private clockSettings(fight: Fight) {
+    return fightClockSettings(fight, fight.categoryId ? this.categories().get(fight.categoryId) : undefined);
   }
 
   protected scoreCount(fight: Fight, side: FightSide, score: 'ippon' | 'wazaAri' | 'shido'): number {
