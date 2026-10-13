@@ -51,6 +51,9 @@
               <th>{{ 'athletes.birthYear' | t }}</th>
               <th>{{ 'athletes.weight' | t }}</th>
               <th>{{ 'categoryAssignment.assignTo' | t }}</th>
+              @if (autoAssignResult()) {
+                <th>{{ 'categoryAssignment.reason' | t }}</th>
+              }
             </tr>
           </thead>
           <tbody>
@@ -68,6 +71,9 @@
                     }
                   </select>
                 </td>
+                @if (autoAssignResult()) {
+                  <td class="muted">{{ autoAssignReasons().get(reg.athleteId) ?? '' }}</td>
+                }
               </tr>
             }
           </tbody>

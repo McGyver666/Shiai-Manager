@@ -5,7 +5,17 @@ namespace ShiaiManager.Api.Services;
 /// </summary>
 /// <param name="Key">Frontend translation key.</param>
 /// <param name="Text">German default text.</param>
-public sealed record LocalizedMessage(string Key, string Text);
+public sealed record LocalizedMessage(string Key, string Text)
+{
+    /// <summary>
+    /// Returns the German text with <c>{name}</c> placeholders replaced by the given values.
+    /// </summary>
+    public string Format(IReadOnlyDictionary<string, string> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return parameters.Aggregate(Text, (text, parameter) => text.Replace($"{{{parameter.Key}}}", parameter.Value, StringComparison.Ordinal));
+    }
+}
 
 /// <summary>
 /// Signals a rejected business operation whose message can be localized by the frontend.
@@ -106,4 +116,29 @@ public static class AgeGroupMessages
     public static readonly LocalizedMessage NoPresetForBirthYear = new(
         "errors.ageGroups.noPresetForBirthYear",
         "Für den Jahrgang wurde keine passende Altersklasse in den Turnier-Presets gefunden.");
+
+    /// <summary>No category exists for the athlete's natural age group and gender.</summary>
+    public static readonly LocalizedMessage NoCategoriesForNaturalAgeGroup = new(
+        "errors.ageGroups.noCategoriesForNaturalAgeGroup",
+        "Für die natürliche Altersklasse {ageGroup} des Athleten sind keine Kategorien angelegt.");
+
+    /// <summary>No category exists for the athlete's selected start age group and gender.</summary>
+    public static readonly LocalizedMessage NoCategoriesForStartAgeGroup = new(
+        "errors.ageGroups.noCategoriesForStartAgeGroup",
+        "Für die Startaltersklasse {ageGroup} des Athleten sind keine Kategorien angelegt.");
+
+    /// <summary>All categories of the effective age group are locked.</summary>
+    public static readonly LocalizedMessage AllCategoriesLocked = new(
+        "errors.ageGroups.allCategoriesLocked",
+        "Alle Kategorien der Altersklasse {ageGroup} sind gesperrt.");
+
+    /// <summary>Athlete weight is above every unlocked weight class of the effective age group.</summary>
+    public static readonly LocalizedMessage NoFittingWeightClass = new(
+        "errors.ageGroups.noFittingWeightClass",
+        "Keine passende Gewichtsklasse in der Altersklasse {ageGroup} für {weightKg} kg gefunden.");
+
+    /// <summary>Athlete has no weight and the effective age group has no unlocked open class.</summary>
+    public static readonly LocalizedMessage NoWeightWithoutOpenClass = new(
+        "errors.ageGroups.noWeightWithoutOpenClass",
+        "Kein Gewicht erfasst und keine offene Gewichtsklasse in der Altersklasse {ageGroup} verfügbar.");
 }

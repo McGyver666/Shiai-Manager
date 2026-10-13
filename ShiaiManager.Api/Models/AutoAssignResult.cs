@@ -17,6 +17,11 @@ public sealed record UnassignedAthlete(
     /// Optional frontend translation key for <see cref="Reason"/>.
     /// </summary>
     public string? ReasonKey { get; init; }
+
+    /// <summary>
+    /// Placeholder values for the <see cref="ReasonKey"/> translation, e.g. <c>ageGroup</c>.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? ReasonParameters { get; init; }
 }
 
 /// <summary>

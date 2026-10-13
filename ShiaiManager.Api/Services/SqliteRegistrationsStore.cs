@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShiaiManager.Api.Data;
 using ShiaiManager.Api.Models;
 using Microsoft.EntityFrameworkCore;
@@ -399,9 +400,9 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
 
         var presets = await _categoryPresetsStore.GetAllAsync(tournamentId, cancellationToken);
 
-        // Load all unlocked categories for the tournament.
+        // Locked categories are loaded only to explain why an athlete stays unassigned.
         var categories = await _dbContext.Categories
-            .Where(c => c.TournamentId == tournamentId && !c.IsLocked)
+            .Where(c => c.TournamentId == tournamentId)
             .ToListAsync(cancellationToken);
 
         int assignedCount = 0;
@@ -429,12 +430,15 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
                 continue;
             }
 
-            // The category birth-year range is only a plausibility hint, so it is not used for matching.
-            var candidates = categories
+            var ageGroupCategories = categories
                 .Where(c =>
                     AgeGroupResolver.IsSameAgeGroup(c.AgeGroup, effectiveAgeGroup)
-                    && (c.Gender == athleteGender || c.Gender == Gender.Mixed.ToString())
-                    && (c.WeightClassKg == null || (weightKg != null && weightKg <= c.WeightClassKg)))
+                    && (c.Gender == athleteGender || c.Gender == Gender.Mixed.ToString()))
+                .ToList();
+
+            // The category birth-year range is only a plausibility hint, so it is not used for matching.
+            var candidates = ageGroupCategories
+                .Where(c => !c.IsLocked && (c.WeightClassKg == null || (weightKg != null && weightKg <= c.WeightClassKg)))
                 // Prefer exact gender classes over mixed, then smallest fitting weight.
                 .OrderBy(c => c.Gender == athleteGender ? 0 : 1)
                 // Best fit: lowest weight class first; open weight (null) last.
@@ -443,11 +447,11 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
 
             if (candidates.Count == 0)
             {
-                var reason = BuildNoMatchReason(athlete, weightKg);
-                unassigned.Add(new UnassignedAthlete(athlete.Id, athlete.FirstName, athlete.LastName, reason));
+                var noMatch = BuildNoMatch(registration, effectiveAgeGroup, ageGroupCategories, weightKg);
+                unassigned.Add(noMatch);
                 _logger.LogInformation(
                     "Athlete {AthleteId} ({LastName}, {FirstName}) could not be auto-assigned: {Reason}",
-                    athlete.Id, athlete.LastName, athlete.FirstName, reason);
+                    athlete.Id, athlete.LastName, athlete.FirstName, noMatch.Reason);
                 continue;
             }
 
@@ -470,14 +474,40 @@ public sealed class SqliteRegistrationsStore : IRegistrationsStore
         return new AutoAssignResult(assignedCount, unassigned.Count, unassigned);
     }
 
-    private static string BuildNoMatchReason(AthleteRecord athlete, decimal? weightKg)
+    private static UnassignedAthlete BuildNoMatch(
+        RegistrationRecord registration,
+        string effectiveAgeGroup,
+        IReadOnlyList<CategoryRecord> ageGroupCategories,
+        decimal? weightKg)
     {
-        if (weightKg == null)
+        var athlete = registration.Athlete!;
+        var parameters = new Dictionary<string, string> { ["ageGroup"] = effectiveAgeGroup };
+        LocalizedMessage message;
+        if (ageGroupCategories.Count == 0)
         {
-            return "Kein Gewicht erfasst und keine offene Gewichtsklasse verfügbar.";
+            message = string.IsNullOrWhiteSpace(registration.StartAgeGroup)
+                ? AgeGroupMessages.NoCategoriesForNaturalAgeGroup
+                : AgeGroupMessages.NoCategoriesForStartAgeGroup;
+        }
+        else if (ageGroupCategories.All(c => c.IsLocked))
+        {
+            message = AgeGroupMessages.AllCategoriesLocked;
+        }
+        else if (weightKg is null)
+        {
+            message = AgeGroupMessages.NoWeightWithoutOpenClass;
+        }
+        else
+        {
+            message = AgeGroupMessages.NoFittingWeightClass;
+            parameters["weightKg"] = weightKg.Value.ToString(CultureInfo.InvariantCulture);
         }
 
-        return $"Keine passende Gewichtsklasse für Jahrgang {athlete.BirthYear}, {athlete.Gender}, {weightKg} kg gefunden.";
+        return new UnassignedAthlete(athlete.Id, athlete.FirstName, athlete.LastName, message.Format(parameters))
+        {
+            ReasonKey = message.Key,
+            ReasonParameters = parameters
+        };
     }
 
     private static Registration MapToModel(RegistrationRecord record) =>

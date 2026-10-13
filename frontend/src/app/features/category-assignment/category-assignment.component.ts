@@ -53,6 +53,18 @@ export class CategoryAssignmentComponent implements OnInit {
 
   protected readonly unassigned = computed(() => this.grouped().get('') ?? []);
 
+  /** Localized auto-assignment reason per athlete id; falls back to the German backend text. */
+  protected readonly autoAssignReasons = computed(() => {
+    const reasons = new Map<string, string>();
+    for (const item of this.autoAssignResult()?.unassigned ?? []) {
+      const translated = item.reasonKey
+        ? this.i18n.translate(item.reasonKey, item.reasonParameters ?? undefined)
+        : item.reason;
+      reasons.set(item.athleteId, translated === item.reasonKey ? item.reason : translated);
+    }
+    return reasons;
+  });
+
   ngOnInit(): void {
     if (this.context.tournamentId()) {
       this.load();
@@ -84,7 +96,6 @@ export class CategoryAssignmentComponent implements OnInit {
     if (!id) return;
     this.loading.set(true);
     this.error.set(null);
-    this.autoAssignResult.set(null);
     this.api.getCategories(id).subscribe({ next: (x) => this.categories.set(x) });
     this.api.getRegistrations(id).subscribe({
       next: (x) => {
