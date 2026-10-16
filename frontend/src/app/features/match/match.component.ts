@@ -946,7 +946,11 @@ export class MatchComponent implements OnInit, OnDestroy {
     }
 
     const currentIsRunning = queue.current?.status === 'InProgress' || queue.current?.status === 'Paused';
-    const positionIndex = currentIsRunning ? 1 : 0;
+    const positionIndex = currentIsRunning || queue.current ? 1 : 0;
+    if (!currentIsRunning && queue.current?.freeFight) {
+      return queue.upcoming[0]?.id === fight.id;
+    }
+
     return queue.upcoming[positionIndex]?.id === fight.id;
   }
 

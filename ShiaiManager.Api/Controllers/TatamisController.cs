@@ -134,6 +134,20 @@ public sealed class TatamisController : ControllerBase
             return NotFound();
         }
 
+        if (!request.IsActive)
+        {
+            var modeResult = await _freeFightModeService.SetEnabledAsync(
+                tournamentId,
+                tatamisId,
+                enabled: false,
+                CurrentUser(),
+                cancellationToken);
+            if (modeResult.Status == FreeFightModeResultStatus.TatamiNotFound)
+            {
+                return NotFound();
+            }
+        }
+
         await _tatamisStore.UpdateAsync(
             tatamisId,
             request.Name,

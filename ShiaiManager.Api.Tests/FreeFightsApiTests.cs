@@ -111,6 +111,40 @@ public sealed class FreeFightsApiTests : IClassFixture<TournamentFlowSmokeTests.
         Assert.Equal(2, stillOnePending!.Upcoming.Count);
     }
 
+    [Fact]
+    public async Task DeactivatingTatami_DisablesModeAndAuditsTheChange()
+    {
+        using var client = _factory.CreateClient();
+        var (tournamentId, tatamiId) = await SeedTournamentWithTatamiAsync(client);
+
+        var enabled = await client.PutAsJsonAsync(
+            $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fight-mode",
+            new { enabled = true });
+        Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
+
+        var deactivated = await client.PutAsJsonAsync(
+            $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}",
+            new UpdateTatamiRequest
+            {
+                Name = "Matte 1",
+                DisplayOrder = 0,
+                IsActive = false
+            });
+        Assert.Equal(HttpStatusCode.NoContent, deactivated.StatusCode);
+
+        var tatami = await client.GetFromJsonAsync<Tatami>(
+            $"/api/tournaments/{tournamentId}/tatamis/{tatamiId}", JsonOptions);
+        Assert.False(tatami!.IsActive);
+        Assert.False(tatami.FreeFightModeEnabled);
+
+        var backup = await client.GetFromJsonAsync<TournamentBackup>(
+            $"/api/tournaments/{tournamentId}/backup", JsonOptions);
+        Assert.Contains(backup!.AuditLogs, entry =>
+            entry.Action == "FreeFightModeEnabled" && entry.EntityId == tatamiId);
+        Assert.Contains(backup.AuditLogs, entry =>
+            entry.Action == "FreeFightModeDisabled" && entry.EntityId == tatamiId);
+    }
+
     [Theory]
     [InlineData("Gast\u0007")]
     [InlineData("Gast\u202E1")]

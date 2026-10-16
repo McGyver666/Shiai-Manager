@@ -1181,5 +1181,25 @@ describe('MatchComponent', () => {
       expect(apiMock.deleteFreeFight).toBeUndefined();
       fixture.destroy();
     });
+
+    it('deletes the mode-maintained position-one fight after confirmation', () => {
+      const current = pendingFight();
+      const generated = freeFight();
+      apiMock.deleteFreeFight = vi.fn().mockReturnValue(of(undefined));
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const { fixture, element } = setup({
+        current,
+        next: generated,
+        onDeck: null,
+        upcoming: [current, generated],
+        freeFightModeEnabled: true,
+      });
+
+      click(fixture, element, '.upcoming-item__delete');
+
+      expect(window.confirm).toHaveBeenCalledWith('freeFight.modeDeleteConfirm');
+      expect(apiMock.deleteFreeFight).toHaveBeenCalledWith('tournament-1', 'free-1');
+      fixture.destroy();
+    });
   });
 });
