@@ -17,6 +17,10 @@ updates:
           - patch
       dev-dependencies:
         dependency-type: development
+        exclude-patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+          - "typescript"
         update-types:
           - minor
           - patch
