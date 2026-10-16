@@ -127,6 +127,10 @@ Use these terms as-is (German primary) in issues, tests, and code names; don't d
   See [ADR-0013](docs/adr/0013-freikampf-fight-kind-without-category.md).
   _Avoid_: Randori, Freundschaftskampf, Einlagekampf, Ad-hoc-Kampf, anonymer Kampf; not to be
   confused with Freilos.
+- **Freikampf-Modus** — a persisted per-Tatami live-operation mode that keeps one ready Freikampf
+  in the next queue position. It is enabled only from the Mattentisch, generates German free-text
+  sides, inherits timing from the latest started Freikampf on that Tatami, and is disabled when
+  its maintained position-one fight is deleted or the Tatami is deactivated.
 - **Osae-komi** — hold-down; server-authoritative timing with Sono-mama/Yoshi pause and resume that freezes both hold and fight clocks.
 - **Hansoku-make** — disqualification from the bout. Currently derived from the 3rd **Shido** (penalty):
   the opponent automatically receives an Ippon; fight status and osae-komi are not changed and the

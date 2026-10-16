@@ -46,7 +46,8 @@ public sealed class EditFightResultTests
             mockHub.Object,
             new Mock<IBracketService>().Object,
             new Mock<IRankingService>().Object,
-            NullLogger<MatchService>.Instance);
+            NullLogger<MatchService>.Instance,
+            new Mock<IFreeFightModeService>().Object);
     }
 
     /// <summary>Seeds a 4-athlete single-elimination bracket: 2 R1 fights → 1 final.</summary>

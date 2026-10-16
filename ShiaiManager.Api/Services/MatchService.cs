@@ -18,6 +18,7 @@ public sealed class MatchService : IMatchService
     private readonly IHubContext<TournamentHub> _hub;
     private readonly IBracketService _bracketService;
     private readonly IRankingService _rankingService;
+    private readonly IFreeFightModeService? _freeFightModeService;
     private readonly ILogger<MatchService> _logger;
 
     private static readonly string MainType = FightBracketType.Main.ToString();
@@ -36,7 +37,8 @@ public sealed class MatchService : IMatchService
         IHubContext<TournamentHub> hub,
         IBracketService bracketService,
         IRankingService rankingService,
-        ILogger<MatchService> logger)
+        ILogger<MatchService> logger,
+        IFreeFightModeService? freeFightModeService = null)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
         ArgumentNullException.ThrowIfNull(auditLog);
@@ -49,6 +51,7 @@ public sealed class MatchService : IMatchService
         _hub = hub;
         _bracketService = bracketService;
         _rankingService = rankingService;
+        _freeFightModeService = freeFightModeService;
         _logger = logger;
     }
 
@@ -194,8 +197,12 @@ public sealed class MatchService : IMatchService
     }
 
     /// <inheritdoc />
-    public async Task<MatchActionResult> StartAsync(Guid fightId, string user, CancellationToken cancellationToken) =>
-        await ExecuteFightOperationAsync(
+    public async Task<MatchActionResult> StartAsync(
+        Guid fightId,
+        string user,
+        CancellationToken cancellationToken)
+    {
+        var result = await ExecuteFightOperationAsync(
             fightId,
             user,
             async (fight, ct) =>
@@ -231,6 +238,25 @@ public sealed class MatchService : IMatchService
             },
             audit: null,
             cancellationToken);
+
+        if (result == MatchActionResult.Success)
+        {
+            var startedFight = await _dbContext.Fights
+                .AsNoTracking()
+                .Where(f => f.Id == fightId)
+                .Select(f => new { f.TournamentId, f.TatamiId })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (startedFight?.TatamiId is { } assignedTatamiId && _freeFightModeService is not null)
+            {
+                await _freeFightModeService.EnsureNextAsync(
+                    startedFight.TournamentId,
+                    assignedTatamiId,
+                    cancellationToken);
+            }
+        }
+
+        return result;
+    }
 
     /// <inheritdoc />
     public async Task<MatchActionResult> PauseAsync(Guid fightId, string user, CancellationToken cancellationToken) =>

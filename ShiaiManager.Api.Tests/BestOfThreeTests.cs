@@ -48,7 +48,8 @@ public sealed class BestOfThreeTests
             hub.Object,
             new Mock<IBracketService>().Object,
             new Mock<IRankingService>().Object,
-            NullLogger<MatchService>.Instance);
+            NullLogger<MatchService>.Instance,
+            new Mock<IFreeFightModeService>().Object);
     }
 
     /// <summary>Seeds a tournament with one club per athlete, one category and one tatami; no draw yet.</summary>

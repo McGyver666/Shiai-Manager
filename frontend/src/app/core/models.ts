@@ -352,6 +352,7 @@ export interface Tatami {
   name: string;
   displayOrder: number;
   isActive: boolean;
+  freeFightModeEnabled?: boolean;
   createdAtUtc: string;
   updatedAtUtc: string;
 }
@@ -603,6 +604,7 @@ export interface TatamiQueue {
   next: Fight | null;
   onDeck: Fight | null;
   upcoming: Fight[];
+  freeFightModeEnabled?: boolean;
 }
 
 /** Whole-tournament aggregate data for the live control-stand overview. */

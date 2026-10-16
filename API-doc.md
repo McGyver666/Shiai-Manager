@@ -11,7 +11,7 @@ The API is served by the ASP.NET Core application under `/api`.
 - `PUT /api/tournaments/{tournamentId}`
 - `DELETE /api/tournaments/{tournamentId}`
 
-- `GET/POST/PUT/DELETE /api/tournaments/{tournamentId}/tatamis` (deleting a tatami also deletes its waiting Freikämpfe)
+- `GET/POST/PUT/DELETE /api/tournaments/{tournamentId}/tatamis` (deleting a tatami also deletes its waiting Freikämpfe; the response includes `freeFightModeEnabled`)
 - `GET/POST/PUT/DELETE /api/tournaments/{tournamentId}/categories`
 - `POST /api/tournaments/{tournamentId}/categories/generate/preview`
 - `POST /api/tournaments/{tournamentId}/categories/generate/apply`
@@ -94,7 +94,8 @@ it never appears in category fights, rankings, club scoring, completed fights or
 - `GET /api/tournaments/{tournamentId}/category-presets/warnings` (Admin/Operator; registrations without age group, presets that can never be a natural age group, categories whose age group has no preset)
 - `POST /api/tournaments/{tournamentId}/category-presets/reset-defaults`
 
-- `GET /api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue`
+- `GET /api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue` (also returns `freeFightModeEnabled`)
+- `PUT /api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fight-mode` (LiveFightOperation roles; body `{ enabled }`; enabling persists the mode, ensures one ready Freikampf at the existing `placeNext` position, writes an audit entry, and broadcasts `TatamiQueueChanged`; inactive tatamis reject enabling with `409`)
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami` (a started fight (`InProgress`, `Paused`, `Completed`) stays on its tatami; moving or unassigning it returns `409`; a Freikampf always stays on the tatami it was created on)
 - `POST /api/tournaments/{tournamentId}/fights/assign-tatami-bulk` (assign many fights to tatamis atomically; if any started fight would change its tatami, nothing is changed and `409` is returned)
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/queue-move`
@@ -111,6 +112,15 @@ it never appears in category fights, rankings, club scoring, completed fights or
 - `POST /api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fights` (live operation roles; adds a Freikampf: `white`/`blue` each `{ athleteId }` or `{ name }` (max. 60 chars, no control or invisible formatting characters), `matchDurationSeconds` (30-3600, default 240), `goldenScoreEnabled`, `goldenScoreDurationSeconds` (30-3600, default 180), `placeNext`; it is queued behind all waiting fights of the tatami, including those whose athletes are still open, or with `placeNext` directly behind the running or current fight; returns `201` with the fight and a `Location` of its `GET` endpoint, `400` for an invalid name or time, a side without name or the same athlete twice, `404` for an unknown tatami or athlete)
 - `PUT /api/tournaments/{tournamentId}/free-fights/{fightId}` (same body without `placeNext`; `409` once the Freikampf has started)
 - `DELETE /api/tournaments/{tournamentId}/free-fights/{fightId}` (`409` once the Freikampf has started; clients are told to reload the tatami queue with the SignalR event `TatamiQueueChanged`)
+
+When `freeFightModeEnabled` is true, enabling the mode or starting a fight on that tatami ensures
+that the next queue position contains a ready Freikampf. Generated fights use `Weiß` and the
+tournament accent side (`Blau` or `Rot`) as stored German names. Their timing comes from the
+latest started Freikampf on that tatami, or defaults to 240 seconds without Golden Score and
+180 seconds Golden Score duration. Pausing/resuming does not generate a fight. Deleting the
+mode-maintained position-one Freikampf disables the mode; other pending Freikämpfe can be deleted
+without changing it. The mode is included in tournament backup/restore and is cleared when a
+tatami is deactivated.
 - `GET /api/tournaments/{tournamentId}/completed-fights` (Admin/Operator; enriched summaries of finished fights)
 - `GET /api/tournaments/{tournamentId}/overview-stats` (authenticated; whole-tournament registered athletes, clubs, categories, fight progress, average duration and ippon count)
 - `POST /api/tournaments/{tournamentId}/completed-fights/{fightId}/edit-result` (Admin; correct scores and winner with a confirmation flow for affected downstream fights)

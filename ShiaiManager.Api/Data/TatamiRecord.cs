@@ -22,6 +22,9 @@ public sealed class TatamiRecord
     /// <summary>Whether this tatami is currently in use.</summary>
     public bool IsActive { get; set; }
 
+    /// <summary>Whether the tatami automatically keeps a ready Freikampf in its next queue position.</summary>
+    public bool IsFreeFightModeEnabled { get; set; }
+
     /// <summary>Creation timestamp in UTC.</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
 

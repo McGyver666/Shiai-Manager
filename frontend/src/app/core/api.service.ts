@@ -314,6 +314,16 @@ export class ApiService {
     return this.http.put<void>(`api/tournaments/${tournamentId}/tatamis/${tatamiId}`, body);
   }
 
+  setFreeFightMode(
+    tournamentId: string,
+    tatamiId: string,
+    enabled: boolean,
+  ): Observable<Tatami> {
+    return this.http.put<Tatami>(
+      `api/tournaments/${tournamentId}/tatamis/${tatamiId}/free-fight-mode`,
+      { enabled });
+  }
+
   deleteTatami(tournamentId: string, tatamiId: string): Observable<void> {
     return this.http.delete<void>(`api/tournaments/${tournamentId}/tatamis/${tatamiId}`);
   }

@@ -91,9 +91,7 @@ public sealed class FreeFightService : IFreeFightService
                 f => f.TournamentId == tournamentId && f.TatamiId == tatamiId
                     && (f.Status == InProgress || f.Status == Paused),
                 cancellationToken);
-            // Without a running fight the first start-ready fight is the current one and keeps its place.
-            var readyCount = ordered.Count(TatamiQueueRules.HasBothSides);
-            insertIndex = fightIsRunning ? 0 : Math.Min(1, readyCount);
+            insertIndex = TatamiQueueRules.PlaceNextIndex(ordered, fightIsRunning);
         }
 
         ordered.Insert(insertIndex, fight);
@@ -148,11 +146,50 @@ public sealed class FreeFightService : IFreeFightService
         if (fight is null) return new(FreeFightResultStatus.FightNotFound);
         if (fight.Status != Pending) return new(FreeFightResultStatus.AlreadyStarted);
 
+        var modeDisabled = false;
+        TatamiRecord? tatami = null;
+        if (fight.TatamiId is { } tatamiId)
+        {
+            tatami = await _dbContext.Tatamis
+                .FirstOrDefaultAsync(t => t.Id == tatamiId && t.TournamentId == tournamentId, cancellationToken);
+            if (tatami?.IsFreeFightModeEnabled == true)
+            {
+                var pending = await TatamiQueueRules.PendingOnTatami(
+                        _dbContext.Fights,
+                        tournamentId,
+                        tatamiId)
+                    .ToListAsync(cancellationToken);
+                var ordered = TatamiQueueRules.InQueueOrder(pending);
+                var fightIsRunning = await _dbContext.Fights.AnyAsync(
+                    f => f.TournamentId == tournamentId
+                        && f.TatamiId == tatamiId
+                        && (f.Status == InProgress || f.Status == Paused),
+                    cancellationToken);
+                modeDisabled = TatamiQueueRules.AtPlaceNext(ordered, fightIsRunning)?.Id == fight.Id;
+                if (modeDisabled)
+                {
+                    tatami.IsFreeFightModeEnabled = false;
+                    tatami.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                }
+            }
+        }
+
         _dbContext.Fights.Remove(fight);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _auditLog.LogAsync(
             tournamentId, user, "FreeFightDeleted", "Fight", fight.Id, $"TatamiId={fight.TatamiId}", cancellationToken);
+        if (modeDisabled && tatami is not null)
+        {
+            await _auditLog.LogAsync(
+                tournamentId,
+                user,
+                "FreeFightModeDisabled",
+                "Tatami",
+                tatami.Id,
+                $"TatamiId={tatami.Id}; Enabled=false; Reason=PositionOneDeleted",
+                cancellationToken);
+        }
 
         _ = _hub.Clients.Group(tournamentId.ToString())
             .SendAsync("TatamiQueueChanged", new { tournamentId, tatamiId = fight.TatamiId }, CancellationToken.None);

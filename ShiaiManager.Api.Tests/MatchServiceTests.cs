@@ -41,7 +41,7 @@ public sealed class MatchServiceTests
         mockClients.Setup(c => c.Group(It.IsAny<string>())).Returns(mockProxy.Object);
         mockProxy.Setup(c => c.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        return new MatchService(ctx, new AuditLogService(ctx, NullLogger<AuditLogService>.Instance), mockHub.Object, new Mock<IBracketService>().Object, new Mock<IRankingService>().Object, NullLogger<MatchService>.Instance);
+        return new MatchService(ctx, new AuditLogService(ctx, NullLogger<AuditLogService>.Instance), mockHub.Object, new Mock<IBracketService>().Object, new Mock<IRankingService>().Object, NullLogger<MatchService>.Instance, new Mock<IFreeFightModeService>().Object);
     }
 
     private static async Task<(Guid TournamentId, Guid CategoryId, List<Guid> AthleteIds)>

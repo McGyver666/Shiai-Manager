@@ -351,6 +351,52 @@ public sealed class BackupRestoreIntegrationTests : IClassFixture<BackupRestoreI
                 restored.GoldenScoreEnabled, restored.GoldenScoreDurationSeconds, restored.WinnerSide));
     }
 
+    [Fact]
+    public async Task BackupAndRestore_RoundTripFreeFightMode()
+    {
+        using var client = _factory.CreateClient();
+        var adminToken = await EnsureAdminAndGetTokenAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var now = DateTimeOffset.UtcNow;
+        var tournamentId = Guid.NewGuid();
+        var tatamiId = Guid.NewGuid();
+        var backup = new TournamentBackup
+        {
+            Version = "1.0",
+            ExportedAtUtc = now,
+            Tournament = new TournamentRecord
+            {
+                Id = tournamentId,
+                Name = "Freikampf-Modus-Backup",
+                Date = new DateOnly(2026, 10, 16),
+                Venue = "Testort",
+                Organizer = "Testveranstalter",
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            },
+            Tatamis =
+            [
+                new TatamiRecord
+                {
+                    Id = tatamiId,
+                    TournamentId = tournamentId,
+                    Name = "Tatami 1",
+                    IsActive = true,
+                    IsFreeFightModeEnabled = true,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
+                }
+            ]
+        };
+
+        var restoreResponse = await client.PostAsJsonAsync("/api/tournaments/restore", backup);
+        Assert.Equal(HttpStatusCode.Created, restoreResponse.StatusCode);
+
+        var exported = await client.GetFromJsonAsync<TournamentBackup>(
+            $"/api/tournaments/{tournamentId}/backup");
+        Assert.True(Assert.Single(exported!.Tatamis).IsFreeFightModeEnabled);
+    }
+
     private static async Task<string> EnsureAdminAndGetTokenAsync(HttpClient client)
     {
         var bootstrapResponse = await client.PostAsJsonAsync("/api/auth/bootstrap-admin", new BootstrapAdminRequest

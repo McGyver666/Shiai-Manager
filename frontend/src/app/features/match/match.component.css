@@ -616,6 +616,19 @@
   margin-left: auto;
 }
 
+.free-fight-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.free-fight-mode-toggle input {
+  accent-color: var(--aka);
+}
+
 .free-fight-actions {
   display: flex;
   justify-content: center;

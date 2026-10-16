@@ -128,6 +128,7 @@ export class MatchComponent implements OnInit, OnDestroy {
 
   protected readonly hubConnected = computed(() => this.hub.connected());
   protected readonly currentFight = computed(() => this.queue()?.current ?? null);
+  protected readonly freeFightModeEnabled = computed(() => this.queue()?.freeFightModeEnabled ?? false);
   /** All pending fights assigned to the tatami, excluding the current fight, in queue order. */
   protected readonly upcomingFights = computed(() => {
     const q = this.queue();
@@ -918,9 +919,43 @@ export class MatchComponent implements OnInit, OnDestroy {
     this.refreshQueue();
   }
 
+  protected toggleFreeFightMode(event: Event): void {
+    const tid = this.liveTournamentId();
+    const tatamiId = this.selectedTatamiId();
+    const checkbox = event.target as HTMLInputElement | null;
+    if (!tid || !tatamiId || !checkbox || !this.canOperateLive()) {
+      return;
+    }
+
+    this.api.setFreeFightMode(tid, tatamiId, checkbox.checked).subscribe({
+      next: () => this.refreshQueue(),
+      error: (err) => {
+        checkbox.checked = this.freeFightModeEnabled();
+        this.errorMessage.set(extractApiError(
+          err,
+          this.i18n.translate('freeFight.modeSaveFailed'),
+          (key) => this.i18n.translate(key)));
+      },
+    });
+  }
+
+  protected isFreeFightModePositionOne(fight: Fight): boolean {
+    const queue = this.queue();
+    if (!queue?.freeFightModeEnabled || !fight.freeFight) {
+      return false;
+    }
+
+    const currentIsRunning = queue.current?.status === 'InProgress' || queue.current?.status === 'Paused';
+    const positionIndex = currentIsRunning ? 1 : 0;
+    return queue.upcoming[positionIndex]?.id === fight.id;
+  }
+
   protected deleteFreeFight(fight: Fight): void {
     const tid = this.liveTournamentId();
-    if (!tid || !this.canEditFreeFight(fight) || !confirm(this.i18n.translate('freeFight.deleteConfirm'))) return;
+    const confirmationKey = this.isFreeFightModePositionOne(fight)
+      ? 'freeFight.modeDeleteConfirm'
+      : 'freeFight.deleteConfirm';
+    if (!tid || !this.canEditFreeFight(fight) || !confirm(this.i18n.translate(confirmationKey))) return;
 
     this.api.deleteFreeFight(tid, fight.id).subscribe({
       next: () => this.refreshQueue(),

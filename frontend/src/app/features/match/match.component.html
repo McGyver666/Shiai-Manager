@@ -269,6 +269,18 @@
         <div class="upcoming-list__header">
           <h2 class="upcoming-list__title">{{ 'match.upcomingFights' | t }}</h2>
           <span class="upcoming-list__count">{{ upcomingFights().length }}</span>
+          <label class="free-fight-mode-toggle">
+            <input
+              type="checkbox"
+              [checked]="freeFightModeEnabled()"
+              [disabled]="!canOperateLive()"
+              [attr.aria-label]="'freeFight.mode' | t"
+              (change)="toggleFreeFightMode($event)" />
+            <span>{{ 'freeFight.mode' | t }}</span>
+          </label>
+          @if (freeFightModeEnabled()) {
+            <span class="badge-bracket badge-bracket--free">{{ 'freeFight.modeActive' | t }}</span>
+          }
           @if (canOperateLive()) {
             <button class="btn btn--tiny btn--secondary upcoming-list__add" type="button" (click)="openCreateFreeFight()">{{ 'freeFight.add' | t }}</button>
           }

@@ -10,6 +10,7 @@ namespace ShiaiManager.Api.Models;
 /// <param name="IsActive">Whether this tatami is currently in use.</param>
 /// <param name="CreatedAtUtc">Creation timestamp in UTC.</param>
 /// <param name="UpdatedAtUtc">Last update timestamp in UTC.</param>
+/// <param name="FreeFightModeEnabled">Whether automatic Freikämpfe are enabled for this tatami.</param>
 public sealed record Tatami(
     Guid Id,
     Guid TournamentId,
@@ -17,4 +18,5 @@ public sealed record Tatami(
     int DisplayOrder,
     bool IsActive,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    bool FreeFightModeEnabled = false);

@@ -194,6 +194,7 @@ public sealed class AppDbContext : DbContext
         tatami.ToTable("Tatamis");
         tatami.HasKey(x => x.Id);
         tatami.Property(x => x.Name).IsRequired().HasMaxLength(80);
+        tatami.Property(x => x.IsFreeFightModeEnabled).IsRequired().HasDefaultValue(false);
         tatami.HasOne(x => x.Tournament)
               .WithMany()
               .HasForeignKey(x => x.TournamentId)

@@ -101,6 +101,10 @@ public sealed class SqliteTatamisStore : ITatamisStore
         record.Name = name.Trim();
         record.DisplayOrder = displayOrder;
         record.IsActive = isActive;
+        if (!isActive)
+        {
+            record.IsFreeFightModeEnabled = false;
+        }
         record.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -140,5 +144,6 @@ public sealed class SqliteTatamisStore : ITatamisStore
             record.DisplayOrder,
             record.IsActive,
             record.CreatedAtUtc,
-            record.UpdatedAtUtc);
+            record.UpdatedAtUtc,
+            record.IsFreeFightModeEnabled);
 }
