@@ -50,7 +50,8 @@ public sealed class FreeFightServiceTests
             .Returns(Task.CompletedTask);
         return new MatchService(
             ctx, new AuditLogService(ctx, NullLogger<AuditLogService>.Instance), mockHub.Object,
-            new Mock<IBracketService>().Object, new Mock<IRankingService>().Object, NullLogger<MatchService>.Instance);
+            new Mock<IBracketService>().Object, new Mock<IRankingService>().Object, NullLogger<MatchService>.Instance,
+            new Mock<IFreeFightModeService>().Object);
     }
 
     private static FreeFightService CreateService(AppDbContext ctx)
@@ -379,6 +380,62 @@ public sealed class FreeFightServiceTests
         Assert.DoesNotContain(queue.Upcoming, f => f.Id == created.Id);
         await using var verifyCtx = CreateDbContext(seeded.Db);
         Assert.True(await verifyCtx.AuditLogs.AnyAsync(a => a.Action == "FreeFightDeleted" && a.EntityId == created.Id));
+    }
+
+    [Fact]
+    public async Task Delete_ModePositionOneFreikampf_DisablesTheMode()
+    {
+        var seeded = await SeedAsync();
+        await using (var setup = CreateDbContext(seeded.Db))
+        {
+            var tatami = await setup.Tatamis.SingleAsync(t => t.Id == seeded.TatamiId);
+            tatami.IsFreeFightModeEnabled = true;
+            await setup.SaveChangesAsync();
+        }
+
+        var created = (await CreateAsync(seeded, Input(), placeNext: true)).Fight!;
+        await using (var ctx = CreateDbContext(seeded.Db))
+        {
+            var result = await CreateService(ctx).DeleteAsync(
+                seeded.TournamentId,
+                created.Id,
+                "Tisch1",
+                CancellationToken.None);
+            Assert.Equal(FreeFightResultStatus.Success, result.Status);
+        }
+
+        await using var verifyCtx = CreateDbContext(seeded.Db);
+        var tatamiAfter = await verifyCtx.Tatamis.SingleAsync(t => t.Id == seeded.TatamiId);
+        Assert.False(tatamiAfter.IsFreeFightModeEnabled);
+        Assert.True(await verifyCtx.AuditLogs.AnyAsync(
+            a => a.Action == "FreeFightModeDisabled" && a.EntityId == seeded.TatamiId));
+    }
+
+    [Fact]
+    public async Task Delete_OtherFreikampf_LeavesTheModeEnabled()
+    {
+        var seeded = await SeedAsync();
+        await using (var setup = CreateDbContext(seeded.Db))
+        {
+            var tatami = await setup.Tatamis.SingleAsync(t => t.Id == seeded.TatamiId);
+            tatami.IsFreeFightModeEnabled = true;
+            await setup.SaveChangesAsync();
+        }
+
+        await CreateAsync(seeded, Input(), placeNext: true);
+        var other = (await CreateAsync(seeded, Input())).Fight!;
+        await using (var ctx = CreateDbContext(seeded.Db))
+        {
+            var result = await CreateService(ctx).DeleteAsync(
+                seeded.TournamentId,
+                other.Id,
+                "Tisch1",
+                CancellationToken.None);
+            Assert.Equal(FreeFightResultStatus.Success, result.Status);
+        }
+
+        await using var verifyCtx = CreateDbContext(seeded.Db);
+        Assert.True((await verifyCtx.Tatamis.SingleAsync(t => t.Id == seeded.TatamiId)).IsFreeFightModeEnabled);
     }
 
     [Fact]

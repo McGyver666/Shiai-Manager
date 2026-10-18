@@ -196,7 +196,10 @@ public sealed class ControllerUnitTests
             .ReturnsAsync(new Tournament(tournamentId, "Test", new DateOnly(2026, 7, 15), "Venue", "Org", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         mockTatamisStore.Setup(s => s.GetAllAsync(tournamentId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Tatami>());
-        var controller = new TatamisController(mockTatamisStore.Object, mockTournamentStore.Object);
+        var controller = new TatamisController(
+            mockTatamisStore.Object,
+            mockTournamentStore.Object,
+            new Mock<IFreeFightModeService>().Object);
 
         var result = await controller.GetAllAsync(tournamentId, CancellationToken.None);
 
@@ -215,7 +218,10 @@ public sealed class ControllerUnitTests
             .ReturnsAsync(new Tournament(tournamentId, "Test", new DateOnly(2026, 7, 15), "Venue", "Org", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         mockTatamisStore.Setup(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Tatami(tatamiId, tournamentId, "Test", 1, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
-        var controller = new TatamisController(mockTatamisStore.Object, mockTournamentStore.Object);
+        var controller = new TatamisController(
+            mockTatamisStore.Object,
+            mockTournamentStore.Object,
+            new Mock<IFreeFightModeService>().Object);
         var request = new CreateTatamiRequest { Name = "Test", DisplayOrder = 1 };
 
         var result = await controller.CreateAsync(tournamentId, request, CancellationToken.None);
@@ -1215,4 +1221,3 @@ public sealed class ControllerUnitTests
 
     #endregion
 }
-

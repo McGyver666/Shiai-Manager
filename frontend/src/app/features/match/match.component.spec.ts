@@ -180,6 +180,7 @@ describe('MatchComponent', () => {
       adjustScore: vi.fn().mockName('adjustScore').mockReturnValue(of(undefined)),
       confirmResult: vi.fn().mockName('confirmResult').mockReturnValue(of(undefined)),
       moveFightInQueue: vi.fn().mockName('moveFightInQueue').mockReturnValue(of(undefined)),
+      setFreeFightMode: vi.fn().mockName('setFreeFightMode').mockReturnValue(of(createTatami())),
     };
 
     getTatamiQueueSpy = apiMock.getTatamiQueue as Mock;
@@ -1136,6 +1137,68 @@ describe('MatchComponent', () => {
 
       tatamiQueueChanges.next({ tournamentId: 'tournament-1', tatamiId: 'tatami-1' });
       expect(getTatamiQueueSpy).toHaveBeenCalled();
+      fixture.destroy();
+    });
+
+    it('shows the active mode badge on the queue', () => {
+      const { fixture, element } = setup({
+        ...queueWith(pendingFight()),
+        freeFightModeEnabled: true,
+      });
+
+      expect(element.querySelector('.badge-bracket--free')?.textContent).toContain('freeFight.modeActive');
+      fixture.destroy();
+    });
+
+    it('enables the mode for the selected tatami', () => {
+      const { fixture, element } = setup({
+        ...queueWith(pendingFight()),
+        freeFightModeEnabled: false,
+      });
+
+      const toggle = element.querySelector('.free-fight-mode-toggle input') as HTMLInputElement;
+      toggle.click();
+      fixture.detectChanges();
+      expect(apiMock.setFreeFightMode).toHaveBeenCalledWith('tournament-1', 'tatami-1', true);
+      expect(apiMock.setFreeFightMode).toHaveBeenCalledWith('tournament-1', 'tatami-1', true);
+      fixture.destroy();
+    });
+
+    it('uses the mode warning when deleting the mode-maintained position-one fight', () => {
+      const generated = freeFight();
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const { fixture, element } = setup({
+        current: generated,
+        next: null,
+        onDeck: null,
+        upcoming: [generated],
+        freeFightModeEnabled: true,
+      });
+
+      click(fixture, element, '.free-fight-actions .btn--negative');
+
+      expect(window.confirm).toHaveBeenCalledWith('freeFight.modeDeleteConfirm');
+      expect(apiMock.deleteFreeFight).toBeUndefined();
+      fixture.destroy();
+    });
+
+    it('deletes the mode-maintained position-one fight after confirmation', () => {
+      const current = pendingFight();
+      const generated = freeFight();
+      apiMock.deleteFreeFight = vi.fn().mockReturnValue(of(undefined));
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const { fixture, element } = setup({
+        current,
+        next: generated,
+        onDeck: null,
+        upcoming: [current, generated],
+        freeFightModeEnabled: true,
+      });
+
+      click(fixture, element, '.upcoming-item__delete');
+
+      expect(window.confirm).toHaveBeenCalledWith('freeFight.modeDeleteConfirm');
+      expect(apiMock.deleteFreeFight).toHaveBeenCalledWith('tournament-1', 'free-1');
       fixture.destroy();
     });
   });

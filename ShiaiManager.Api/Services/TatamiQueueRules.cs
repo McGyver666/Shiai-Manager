@@ -34,6 +34,28 @@ internal static class TatamiQueueRules
             .ThenBy(f => f.FightNumber)
             .ToList();
 
+    /// <summary>
+    /// Returns the insertion index used by the existing "place next" behavior.
+    /// A running fight is followed by the first pending fight; without one, the current
+    /// start-ready fight keeps its place and the new fight follows it.
+    /// </summary>
+    public static int PlaceNextIndex(IReadOnlyList<FightRecord> ordered, bool fightIsRunning) =>
+        fightIsRunning ? 0 : Math.Min(1, ordered.Count(HasBothSides));
+
+    /// <summary>
+    /// Returns the fight occupying the automatic next slot. If no fight is running and the
+    /// current fight is already a Freikampf, it is the slot maintained by the mode.
+    /// </summary>
+    public static FightRecord? AtPlaceNext(IReadOnlyList<FightRecord> ordered, bool fightIsRunning)
+    {
+        if (!fightIsRunning && ordered.ElementAtOrDefault(0)?.IsFree == true)
+        {
+            return ordered[0];
+        }
+
+        return ordered.ElementAtOrDefault(PlaceNextIndex(ordered, fightIsRunning));
+    }
+
     /// <summary>Normalizes the manual queue order to 0..n-1 so the order is stable and gap-free.</summary>
     public static void Renumber(IReadOnlyList<FightRecord> ordered, DateTimeOffset now)
     {

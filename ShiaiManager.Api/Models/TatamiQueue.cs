@@ -9,10 +9,12 @@ namespace ShiaiManager.Api.Models;
 /// <param name="Next">The fight after the current one.</param>
 /// <param name="OnDeck">The fight after the next one.</param>
 /// <param name="Upcoming">All playable fights assigned to this tatami, in queue order.</param>
+/// <param name="FreeFightModeEnabled">Whether automatic Freikämpfe are enabled for this tatami.</param>
 public sealed record TatamiQueue(
     Guid TatamiId,
     string TatamiName,
     Fight? Current,
     Fight? Next,
     Fight? OnDeck,
-    IReadOnlyList<Fight> Upcoming);
+    IReadOnlyList<Fight> Upcoming,
+    bool FreeFightModeEnabled = false);

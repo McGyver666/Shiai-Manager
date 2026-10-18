@@ -143,6 +143,28 @@ public sealed class TatamisStoreTests
 
     [Fact]
     [Trait("Category", "UnitTest")]
+    public async Task UpdateAsync_WhenTatamiIsDeactivated_DisablesFreeFightMode()
+    {
+        var db = CreateDatabasePath();
+        await using var ctx = CreateDbContext(db);
+        await ctx.Database.EnsureCreatedAsync();
+        var tid = await SeedTournamentAsync(ctx);
+        var store = new SqliteTatamisStore(ctx, NullLogger<SqliteTatamisStore>.Instance);
+        var created = await store.CreateAsync(tid, "Tatami Modus", 0, CancellationToken.None);
+        var record = await ctx.Tatamis.SingleAsync(x => x.Id == created.Id);
+        record.IsFreeFightModeEnabled = true;
+        await ctx.SaveChangesAsync();
+
+        Assert.True(await store.UpdateAsync(created.Id, "Tatami Modus", 0, isActive: false, CancellationToken.None));
+
+        var loaded = await store.GetByIdAsync(created.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.False(loaded!.IsActive);
+        Assert.False(loaded.FreeFightModeEnabled);
+    }
+
+    [Fact]
+    [Trait("Category", "UnitTest")]
     public async Task UpdateAsync_WhenTatamisDoesNotExist_ReturnsFalse()
     {
         var db = CreateDatabasePath();

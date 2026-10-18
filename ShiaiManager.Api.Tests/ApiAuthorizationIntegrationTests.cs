@@ -347,6 +347,7 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
             (HttpMethod.Get, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", null),
             (HttpMethod.Put, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", JsonContent.Create(FreeFightBody)),
             (HttpMethod.Delete, $"/api/tournaments/{tournamentId}/free-fights/{fightId}", null),
+            (HttpMethod.Put, $"/api/tournaments/{tournamentId}/tatamis/{Guid.NewGuid()}/free-fight-mode", JsonContent.Create(new { Enabled = true })),
         ];
     }
 

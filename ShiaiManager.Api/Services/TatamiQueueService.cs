@@ -64,6 +64,7 @@ public sealed class TatamiQueueService : ITatamiQueueService
             playable.ElementAtOrDefault(0),
             playable.ElementAtOrDefault(1),
             playable.ElementAtOrDefault(2),
-            playable);
+            playable,
+            tatami.IsFreeFightModeEnabled);
     }
 }

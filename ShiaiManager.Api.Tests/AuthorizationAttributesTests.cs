@@ -60,6 +60,16 @@ public sealed class AuthorizationAttributesTests
     }
 
     [Fact]
+    public void TatamisController_FreeFightMode_UsesLiveFightAuthorization()
+    {
+        var method = FindMethod(typeof(TatamisController), nameof(TatamisController.SetFreeFightModeAsync));
+        var authorize = method.GetCustomAttribute<AuthorizeAttribute>();
+
+        Assert.NotNull(authorize);
+        Assert.Equal("LiveFightOperation", authorize!.Policy);
+    }
+
+    [Fact]
     public void AuthController_ChangePassword_AllowsEveryAuthenticatedRole()
     {
         var method = FindMethod(typeof(AuthController), nameof(AuthController.ChangePasswordAsync));

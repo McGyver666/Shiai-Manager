@@ -15,16 +15,22 @@ public sealed class TatamisController : ControllerBase
 {
     private readonly ITatamisStore _tatamisStore;
     private readonly ITournamentStore _tournamentStore;
+    private readonly IFreeFightModeService _freeFightModeService;
 
     /// <summary>
     /// Initializes a new controller instance.
     /// </summary>
-    public TatamisController(ITatamisStore tatamisStore, ITournamentStore tournamentStore)
+    public TatamisController(
+        ITatamisStore tatamisStore,
+        ITournamentStore tournamentStore,
+        IFreeFightModeService freeFightModeService)
     {
         ArgumentNullException.ThrowIfNull(tatamisStore);
         ArgumentNullException.ThrowIfNull(tournamentStore);
+        ArgumentNullException.ThrowIfNull(freeFightModeService);
         _tatamisStore = tatamisStore;
         _tournamentStore = tournamentStore;
+        _freeFightModeService = freeFightModeService;
     }
 
     /// <summary>
@@ -128,6 +134,20 @@ public sealed class TatamisController : ControllerBase
             return NotFound();
         }
 
+        if (!request.IsActive)
+        {
+            var modeResult = await _freeFightModeService.SetEnabledAsync(
+                tournamentId,
+                tatamisId,
+                enabled: false,
+                CurrentUser(),
+                cancellationToken);
+            if (modeResult.Status == FreeFightModeResultStatus.TatamiNotFound)
+            {
+                return NotFound();
+            }
+        }
+
         await _tatamisStore.UpdateAsync(
             tatamisId,
             request.Name,
@@ -136,6 +156,40 @@ public sealed class TatamisController : ControllerBase
             cancellationToken);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Enables or disables automatic Freikampf generation for a tatami.
+    /// </summary>
+    [Authorize(Policy = "LiveFightOperation")]
+    [HttpPut("{tatamisId:guid}/free-fight-mode")]
+    [ProducesResponseType(typeof(Tatami), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<Tatami>> SetFreeFightModeAsync(
+        Guid tournamentId,
+        Guid tatamisId,
+        [FromBody] UpdateFreeFightModeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _freeFightModeService.SetEnabledAsync(
+            tournamentId,
+            tatamisId,
+            request.Enabled,
+            CurrentUser(),
+            cancellationToken);
+
+        return result.Status switch
+        {
+            FreeFightModeResultStatus.Success => Ok(result.Tatami),
+            FreeFightModeResultStatus.TatamiNotFound => NotFound(),
+            FreeFightModeResultStatus.TatamiInactive => this.LocalizedConflict(
+                "Freikampf-Modus kann auf einer inaktiven Matte nicht aktiviert werden.",
+                new LocalizedMessage(
+                    "errors.freeFight.modeInactive",
+                    "Freikampf-Modus kann auf einer inaktiven Matte nicht aktiviert werden.")),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
     }
 
     /// <summary>
@@ -170,4 +224,7 @@ public sealed class TatamisController : ControllerBase
         var tournament = await _tournamentStore.GetByIdAsync(tournamentId, cancellationToken);
         return tournament is not null;
     }
+
+    private string CurrentUser() =>
+        string.IsNullOrWhiteSpace(User.Identity?.Name) ? "unbekannt" : User.Identity!.Name!;
 }
