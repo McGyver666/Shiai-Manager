@@ -66,6 +66,8 @@ public sealed class TournamentFlowSmokeTests : IClassFixture<TournamentFlowSmoke
         // Step 3: Create tatami.
         var tatami = await PostAndRead<Tatami>(client, $"/api/tournaments/{tournament.Id}/tatamis",
             new CreateTatamiRequest { Name = "Tatami 1", DisplayOrder = 1 });
+        var secondTatami = await PostAndRead<Tatami>(client, $"/api/tournaments/{tournament.Id}/tatamis",
+            new CreateTatamiRequest { Name = "Tatami 2", DisplayOrder = 2 });
 
         // Step 4: Create category (U18 Männer -66 kg).
         var category = await PostAndRead<Category>(client, $"/api/tournaments/{tournament.Id}/categories",
@@ -133,12 +135,46 @@ public sealed class TournamentFlowSmokeTests : IClassFixture<TournamentFlowSmoke
 
         // Step 8: Assign tatami and verify queue.
         var firstFight = realFights.First();
+        var adminAssignTatami = await client.PostAsJsonAsync(
+            $"/api/tournaments/{tournament.Id}/fights/{firstFight.Id}/assign-tatami",
+            new AssignTatamiRequest { TatamiId = secondTatami.Id });
+        Assert.Equal(HttpStatusCode.NoContent, adminAssignTatami.StatusCode);
+
+        var createOperator = await client.PostAsJsonAsync("/api/auth/users", new CreateUserRequest
+        {
+            UserName = "smoke-operator",
+            Password = "Operator!1234",
+            Role = "Operator"
+        });
+        Assert.Equal(HttpStatusCode.Created, createOperator.StatusCode);
+        var operatorToken = await LoginAsync(client, "smoke-operator", "Operator!1234");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", operatorToken);
+
         var assignTatami = await client.PostAsJsonAsync(
             $"/api/tournaments/{tournament.Id}/fights/{firstFight.Id}/assign-tatami",
             new AssignTatamiRequest { TatamiId = tatami.Id });
         Assert.Equal(HttpStatusCode.NoContent, assignTatami.StatusCode);
 
-        var queueResponse = await client.GetAsync($"/api/tournaments/{tournament.Id}/tatamis/{tatami.Id}/queue");
+        var assignedQueue = await client.GetFromJsonAsync<TatamiQueue>(
+            $"/api/tournaments/{tournament.Id}/tatamis/{tatami.Id}/queue", JsonOptions);
+        Assert.Contains(assignedQueue!.Upcoming, fight => fight.Id == firstFight.Id);
+
+        var bulkAssignTatami = await client.PostAsJsonAsync(
+            $"/api/tournaments/{tournament.Id}/fights/assign-tatami-bulk",
+            new BulkAssignTatamiRequest
+            {
+                Assignments = [new BulkTatamiAssignment { FightId = firstFight.Id, TatamiId = secondTatami.Id }]
+            });
+        Assert.Equal(HttpStatusCode.NoContent, bulkAssignTatami.StatusCode);
+
+        var originalQueue = await client.GetFromJsonAsync<TatamiQueue>(
+            $"/api/tournaments/{tournament.Id}/tatamis/{tatami.Id}/queue", JsonOptions);
+        var reassignedQueue = await client.GetFromJsonAsync<TatamiQueue>(
+            $"/api/tournaments/{tournament.Id}/tatamis/{secondTatami.Id}/queue", JsonOptions);
+        Assert.Empty(originalQueue!.Upcoming);
+        Assert.Contains(reassignedQueue!.Upcoming, fight => fight.Id == firstFight.Id);
+
+        var queueResponse = await client.GetAsync($"/api/tournaments/{tournament.Id}/tatamis/{secondTatami.Id}/queue");
         Assert.Equal(HttpStatusCode.OK, queueResponse.StatusCode);
 
         // Step 9: Start fight — category should lock after this.
