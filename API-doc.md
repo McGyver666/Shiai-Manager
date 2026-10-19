@@ -96,8 +96,8 @@ it never appears in category fights, rankings, club scoring, completed fights or
 
 - `GET /api/tournaments/{tournamentId}/tatamis/{tatamiId}/queue` (also returns `freeFightModeEnabled`)
 - `PUT /api/tournaments/{tournamentId}/tatamis/{tatamiId}/free-fight-mode` (LiveFightOperation roles; body `{ enabled }`; enabling persists the mode, ensures one ready Freikampf at the existing `placeNext` position, writes an audit entry, and broadcasts `TatamiQueueChanged`; inactive tatamis reject enabling with `409`)
-- `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami` (a started fight (`InProgress`, `Paused`, `Completed`) stays on its tatami; moving or unassigning it returns `409`; a Freikampf always stays on the tatami it was created on)
-- `POST /api/tournaments/{tournamentId}/fights/assign-tatami-bulk` (assign many fights to tatamis atomically; if any started fight would change its tatami, nothing is changed and `409` is returned)
+- `POST /api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami` (Admin/Operator; a started fight (`InProgress`, `Paused`, `Completed`) stays on its tatami; moving or unassigning it returns `409`; a Freikampf always stays on the tatami it was created on)
+- `POST /api/tournaments/{tournamentId}/fights/assign-tatami-bulk` (Admin/Operator; assign many fights to tatamis atomically; if any started fight would change its tatami, nothing is changed and `409` is returned)
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/queue-move`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/start`
 - `POST /api/tournaments/{tournamentId}/fights/{fightId}/stop`

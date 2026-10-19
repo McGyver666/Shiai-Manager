@@ -311,6 +311,44 @@ public sealed class ApiAuthorizationIntegrationTests : IClassFixture<ApiAuthoriz
         }
     }
 
+    [Theory]
+    [InlineData("Admin", "tatami-admin", "Admin!123456", HttpStatusCode.NotFound)]
+    [InlineData("Operator", "tatami-operator", "Operator!1234", HttpStatusCode.NotFound)]
+    [InlineData("Competition", "tatami-competition", "Competition!1234", HttpStatusCode.Forbidden)]
+    [InlineData("Display", "tatami-display", "Display!1234", HttpStatusCode.Forbidden)]
+    public async Task TatamiAssignmentEndpoints_EnforceRoleMatrix(
+        string role,
+        string userName,
+        string password,
+        HttpStatusCode expectedStatus)
+    {
+        using var client = _factory.CreateClient();
+        await BootstrapAdminAndCreateUserAsync(client, userName, role);
+
+        var token = await LoginAndGetTokenAsync(client, userName, password);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var tournamentId = Guid.NewGuid();
+        var fightId = Guid.NewGuid();
+
+        var requests = new (string Uri, HttpContent Content)[]
+        {
+            ($"/api/tournaments/{tournamentId}/fights/{fightId}/assign-tatami",
+                JsonContent.Create(new AssignTatamiRequest { TatamiId = Guid.NewGuid() })),
+            ($"/api/tournaments/{tournamentId}/fights/assign-tatami-bulk",
+                JsonContent.Create(new BulkAssignTatamiRequest
+                {
+                    Assignments = [new BulkTatamiAssignment { FightId = fightId, TatamiId = Guid.NewGuid() }]
+                }))
+        };
+
+        foreach (var request in requests)
+        {
+            using var response = await client.PostAsync(request.Uri, request.Content);
+
+            Assert.Equal(expectedStatus, response.StatusCode);
+        }
+    }
+
     [Fact]
     public async Task AnonymousCaller_CannotOperateLiveFight()
     {

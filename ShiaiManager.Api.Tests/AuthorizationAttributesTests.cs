@@ -81,13 +81,14 @@ public sealed class AuthorizationAttributesTests
 
     [Theory]
     [InlineData(nameof(MatchController.AssignTatamiAsync))]
-    public void MatchController_AdminOnlyEndpoints_AreExplicitlyRestricted(string methodName)
+    [InlineData(nameof(MatchController.AssignTatamiBulkAsync))]
+    public void MatchController_TatamiAssignmentEndpoints_AllowAdminAndOperator(string methodName)
     {
         var method = FindMethod(typeof(MatchController), methodName);
         var authorize = method.GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(authorize);
-        Assert.Equal("Admin", authorize!.Roles);
+        Assert.Equal("Admin,Operator", authorize!.Roles);
     }
 
     [Fact]
